@@ -1,0 +1,41 @@
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.iml
+*.ipr
+*.iws
+
+# Files
+*.log
+*.pyc
+*.swp
+.DS_Store
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Environment
+.env
+.env.local
+
+# API keys — never commit
+lib/config/api_keys.dart
+
+# Cloud Functions
+functions/node_modules/
+
+# Firebase Android config (contains API keys)
+android/app/google-services.json
+android/app/google-services*.json

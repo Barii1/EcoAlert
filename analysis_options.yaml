@@ -1,0 +1,13 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Flutter 3.31+ deprecations (e.g., Color.withOpacity) create a lot of
+    # low-signal noise in this demo app.
+    deprecated_member_use: ignore
+    deprecated_member_use_from_same_package: ignore
+
+    # Style/perf hints – keep the code readable over micro-optimizations.
+    prefer_const_constructors: ignore
+    prefer_const_literals_to_create_immutables: ignore
+    prefer_final_fields: ignore

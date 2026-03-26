@@ -1,0 +1,71 @@
+name: ecoalert
+description: AI-powered environmental hazard prediction and alert system for Pakistan
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.14.0
+  firebase_storage: ^11.6.0
+  firebase_messaging: ^14.7.10
+  # firebase_analytics: ^10.8.0      # Enable when needed
+  flutter_local_notifications: ^17.0.0
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # Maps — OpenStreetMap via flutter_map
+  flutter_map: ^7.0.0
+  latlong2: ^0.9.0
+  flutter_map_cancellable_tile_provider: ^3.0.2
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+  
+  # UI & Icons
+  cupertino_icons: ^1.0.6
+  flutter_svg: ^2.0.9
+  
+  # HTTP & API
+  http: ^1.1.2
+  dio: ^5.4.0
+  
+  # Local Storage
+  shared_preferences: ^2.2.2
+  
+  # Utilities
+  intl: ^0.18.1
+  url_launcher: ^6.2.2
+  image_picker: ^1.0.7
+  camera: ^0.11.0
+  fl_chart: ^0.68.0
+  shimmer: ^3.0.0
+  share_plus: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.13.1
+  image: ^4.0.17
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icons/app_icon.png"
+  adaptive_icon_foreground: "assets/icons/app_icon.png"
+  adaptive_icon_background: "#000000"
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
+  
