@@ -1,0 +1,6 @@
+temperature
+humidity
+pressure
+cloud_cover
+wind_speed
+dew_point
