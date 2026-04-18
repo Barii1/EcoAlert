@@ -16,7 +16,7 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR_ANDROID_API_KEY',
+    apiKey: 'AIzaSyBzVIz8ArQaSxXgkQzaoPHpqDdEdQu7tKE',
     appId: '1:125523315849:android:c3078972c20fb200a94a58',
     messagingSenderId: '125523315849',
     projectId: 'ecoalert-31c81',

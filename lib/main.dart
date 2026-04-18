@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'firebase_options.dart';
 import 'config/app_colors.dart';
 import 'services/firestore_service.dart';
-import 'services/storage_service.dart';
 import 'services/notification_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_root.dart';
@@ -44,12 +44,13 @@ import 'utils/page_transitions.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase on Android using google-services.json if present.
-  // (We avoid committing secret API keys to the git repo.)
+  // Initialize Firebase (Android uses google-services.json / firebase_options).
   bool firebaseReady = false;
   if (!kIsWeb) {
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
       firebaseReady = true;
       debugPrint('[EcoAlert] Firebase initialized successfully');
     } catch (e) {
@@ -67,6 +68,9 @@ void main() async {
   final FirestoreService? firestoreService =
       firebaseReady ? FirestoreService() : null;
 
+  final authProvider = AuthProvider(useFirebase: firebaseReady);
+  await authProvider.initAuth();
+
   // Initialize push notifications if Firebase is ready.
   if (firebaseReady) {
     await NotificationService.instance.init();
@@ -75,6 +79,7 @@ void main() async {
 
   runApp(EcoAlertApp(
     themeProvider: themeProvider,
+    authProvider: authProvider,
     useFirebase: firebaseReady,
     firestoreService: firestoreService,
   ));
@@ -84,11 +89,13 @@ class EcoAlertApp extends StatelessWidget {
   const EcoAlertApp({
     super.key,
     required this.themeProvider,
+    required this.authProvider,
     this.useFirebase = false,
     this.firestoreService,
   });
 
   final ThemeProvider themeProvider;
+  final AuthProvider authProvider;
   final bool useFirebase;
   final FirestoreService? firestoreService;
 
@@ -97,7 +104,7 @@ class EcoAlertApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
-        ChangeNotifierProvider(create: (_) => AuthProvider(useFirebase: useFirebase)),
+        ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
         ChangeNotifierProvider(
           create: (_) => AlertProvider(firestoreService: firestoreService)..init(),
@@ -110,7 +117,6 @@ class EcoAlertApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => ReportProvider(
             firestoreService: firestoreService,
-            storageService: useFirebase ? StorageService() : null,
           )..init(),
         ),
       ],

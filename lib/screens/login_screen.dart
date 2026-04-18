@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
 import '../providers/auth_provider.dart';
@@ -77,28 +78,40 @@ class _LoginScreenState extends State<LoginScreen>
     final form = _formKey.currentState;
     if (form != null && !form.validate()) return;
 
-    final authProvider =
-        Provider.of<AuthProvider>(context, listen: false);
-
-    final success = await authProvider.login(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
-
-    if (!mounted) return;
-
-    if (success) {
+    try {
+      await context.read<AuthProvider>().firebaseLogin(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
+      if (!mounted) return;
+      final authProvider = context.read<AuthProvider>();
       if (authProvider.isAdmin) {
         Navigator.pushReplacementNamed(context, '/admin');
       } else {
         Navigator.pushReplacementNamed(context, '/navigation');
       }
-    } else {
+    } on FirebaseAuthException catch (e) {
+      String message = 'Login failed. Please try again.';
+      if (e.code == 'user-not-found') {
+        message = 'No account found with this email.';
+      } else if (e.code == 'wrong-password') {
+        message = 'Incorrect password.';
+      } else if (e.code == 'invalid-email') {
+        message = 'Invalid email address.';
+      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            authProvider.errorMessage ?? 'Login failed',
-          ),
+          content: Text(message),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Login failed: $e'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),

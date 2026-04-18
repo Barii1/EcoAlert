@@ -13,8 +13,7 @@ dependencies:
   # Firebase
   firebase_core: ^2.24.2
   firebase_auth: ^4.16.0
-  cloud_firestore: ^4.14.0
-  firebase_storage: ^11.6.0
+  cloud_firestore: ^4.15.0
   firebase_messaging: ^14.7.10
   # firebase_analytics: ^10.8.0      # Enable when needed
   flutter_local_notifications: ^17.0.0
@@ -41,6 +40,7 @@ dependencies:
   shared_preferences: ^2.2.2
   
   # Utilities
+  crypto: ^3.0.3
   intl: ^0.18.1
   url_launcher: ^6.2.2
   image_picker: ^1.0.7

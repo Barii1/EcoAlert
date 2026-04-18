@@ -1105,7 +1105,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       onPressed: () async {
                                         final auth = context.read<AuthProvider>();
                                         Navigator.pop(context);
-                                        await auth.logout();
+                                        if (auth.isFirebaseUser) {
+                                          await auth.firebaseLogout();
+                                        } else {
+                                          await auth.logout();
+                                        }
                                         if (!context.mounted) return;
                                         Navigator.pushNamedAndRemoveUntil(
                                           context,

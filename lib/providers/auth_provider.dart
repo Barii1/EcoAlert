@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/demo_auth_service.dart';
@@ -7,6 +8,11 @@ import '../firebase_options.dart';
 
 class AuthProvider extends ChangeNotifier {
   late final AuthService _authService;
+  FirebaseAuthService? _firebaseAuthService;
+  bool _isFirebaseUser = false;
+  bool get isFirebaseUser => _isFirebaseUser;
+  Map<String, dynamic>? _firestoreProfile;
+  Map<String, dynamic>? get firestoreProfile => _firestoreProfile;
   final bool _useFirebase;
 
   UserModel? _currentUser;
@@ -17,7 +23,10 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider({bool? useFirebase})
       : _useFirebase = useFirebase ?? DefaultFirebaseOptions.isConfigured {
-    _authService = _useFirebase ? FirebaseAuthService() : DemoAuthService();
+    _authService = DemoAuthService();
+    if (_useFirebase) {
+      _firebaseAuthService = FirebaseAuthService();
+    }
   }
 
   // ── Getters ──
@@ -38,21 +47,113 @@ class AuthProvider extends ChangeNotifier {
     _hasShownUpgradePrompt = true;
   }
 
+  UserModel _profileToUserModel(String uid, Map<String, dynamic>? profile) {
+    final role = (profile?['role'] as String?) ?? 'user';
+    final mappedRole = role == 'admin'
+        ? UserRole.admin
+        : role == 'premium'
+            ? UserRole.premium
+            : UserRole.registered;
+    return UserModel(
+      id: uid,
+      username: (profile?['username'] as String?) ?? 'User',
+      email: (profile?['email'] as String?) ?? '',
+      phoneNumber: (profile?['phoneNumber'] as String?) ?? '',
+      cnicNumber: '',
+      province: (profile?['province'] as String?) ?? '',
+      city: (profile?['city'] as String?) ?? '',
+      createdAt: DateTime.now(),
+      role: mappedRole,
+    );
+  }
+
+  /// Call this on app startup. Restores Firebase session if user was
+  /// previously logged in. Does nothing if no session exists.
+  Future<void> initAuth() async {
+    if (_firebaseAuthService == null) return;
+    final User? firebaseUser = _firebaseAuthService!.getCurrentUser();
+    if (firebaseUser != null) {
+      _isFirebaseUser = true;
+      _firestoreProfile = await _firebaseAuthService!
+          .getUserProfile(firebaseUser.uid);
+      _currentUser = _profileToUserModel(firebaseUser.uid, _firestoreProfile);
+      _isAuthenticated = true;
+      notifyListeners();
+    }
+  }
+
+  /// Real Firebase login. Throws on failure so UI can show error.
+  Future<void> firebaseLogin(String email, String password) async {
+    if (_firebaseAuthService == null) {
+      throw FirebaseAuthException(
+        code: 'not-initialized',
+        message: 'Firebase auth is not initialized.',
+      );
+    }
+    final user = await _firebaseAuthService!.signIn(
+      email: email,
+      password: password,
+    );
+    if (user != null) {
+      _isFirebaseUser = true;
+      _firestoreProfile = await _firebaseAuthService!
+          .getUserProfile(user.uid);
+      _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
+      _isAuthenticated = true;
+      notifyListeners();
+    }
+  }
+
+  /// Real Firebase sign up. Throws on failure so UI can show error.
+  Future<void> firebaseSignUp({
+    required String email,
+    required String password,
+    required String username,
+    required String phoneNumber,
+    required String cnicNumber,
+    required String province,
+    required String city,
+  }) async {
+    if (_firebaseAuthService == null) {
+      throw FirebaseAuthException(
+        code: 'not-initialized',
+        message: 'Firebase auth is not initialized.',
+      );
+    }
+    final user = await _firebaseAuthService!.signUp(
+      email: email,
+      password: password,
+      username: username,
+      phoneNumber: phoneNumber,
+      cnicNumber: cnicNumber,
+      province: province,
+      city: city,
+    );
+    if (user != null) {
+      _isFirebaseUser = true;
+      _firestoreProfile = await _firebaseAuthService!
+          .getUserProfile(user.uid);
+      _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
+      _isAuthenticated = true;
+      notifyListeners();
+    }
+  }
+
+  /// Signs out Firebase user. Does not affect demo sessions.
+  Future<void> firebaseLogout() async {
+    if (_firebaseAuthService == null) return;
+    await _firebaseAuthService!.signOut();
+    _isFirebaseUser = false;
+    _firestoreProfile = null;
+    _currentUser = null;
+    _isAuthenticated = false;
+    notifyListeners();
+  }
+
   /// Try to restore a previously signed-in session (Firebase only).
   Future<void> tryAutoLogin() async {
     if (!_useFirebase) return;
-    try {
-      final user = await _authService.getCurrentUser();
-      if (user != null) {
-        _currentUser = user;
-        _isAuthenticated = true;
-        _hasShownUpgradePrompt =
-            user.role == UserRole.premium || user.role == UserRole.admin;
-        notifyListeners();
-      }
-    } catch (_) {
-      // Silent fail — user just sees the login screen
-    }
+    await initAuth();
   }
 
   // ══════════════════════════════════════════════

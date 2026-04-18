@@ -5,17 +5,13 @@ import 'package:flutter/foundation.dart';
 
 import '../models/hazard_report_model.dart';
 import '../services/firestore_service.dart';
-import '../services/storage_service.dart';
 
 class ReportProvider extends ChangeNotifier {
   ReportProvider({
     FirestoreService? firestoreService,
-    StorageService? storageService,
-  })  : _firestoreService = firestoreService,
-        _storageService = storageService;
+  }) : _firestoreService = firestoreService;
 
   final FirestoreService? _firestoreService;
-  final StorageService? _storageService;
   StreamSubscription? _reportsSub;
 
   List<HazardReportModel> _reports = [];
@@ -87,21 +83,9 @@ class ReportProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final docId = await _firestoreService!.addReport(report);
+      await _firestoreService!.addReport(report);
 
-      // Upload images to Firebase Storage, then update Firestore doc with URLs.
-      if (images != null && images.isNotEmpty && _storageService != null) {
-        final urls = await _storageService!.uploadReportImages(
-          reportId: docId,
-          images: images,
-        );
-        if (urls.isNotEmpty) {
-          await _firestoreService!.updateReport(docId, {
-            'imageUrls': urls,
-            'imageCount': urls.length,
-          });
-        }
-      }
+      // Image uploads are handled by backend/Supabase integration (not Firebase Storage).
 
       _isLoading = false;
       notifyListeners();
