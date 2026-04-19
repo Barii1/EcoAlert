@@ -1,6 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ecoalert/config/api_keys.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
+import '../config/app_text_styles.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -10,821 +14,475 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _completeOnboarding() async {
+  void _handleGetStarted() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarding_complete', true);
+    final packageInfo = await PackageInfo.fromPlatform();
+
+    await prefs.setBool('onboarding_seen_v1', true);
+    await prefs.setString('last_seen_version', packageInfo.version);
+
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/location');
+      Navigator.pushReplacementNamed(context, '/login');
     }
   }
 
-  void _skipOnboarding() {
-    _completeOnboarding();
-  }
-
-  void _nextPage() {
-    if (_currentPage < 3) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _completeOnboarding();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0f2323),
-      body: Stack(
-        children: [
-          // Subtle background pattern
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.07,
-              child: Container(
-                decoration: const BoxDecoration(
-                  image: DecorationImage(
-                    image: NetworkImage(
-                      'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Pakistan_physical_map.svg/2560px-Pakistan_physical_map.svg.png',
-                    ),
-                    fit: BoxFit.cover,
-                    opacity: 0.1,
+  void _handleLearnMore() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'About EcoAlert',
+                style: AppTextStyles.headline.copyWith(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF181D1A),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'EcoAlert is an environmental intelligence platform that provides real-time predictions and alerts for critical weather events across Pakistan.',
+                style: AppTextStyles.body.copyWith(
+                  fontSize: 16,
+                  color: const Color(0xFF404944),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Features',
+                style: AppTextStyles.headline.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF181D1A),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...[
+                ('Smog Alerts', 'Real-time air quality monitoring'),
+                ('Flood Warnings', 'Early detection of water level rises'),
+                ('Instant Notifications', 'SMS and push alerts before disaster strikes'),
+              ].map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Color(0xFF002E20), size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.$1,
+                              style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF181D1A),
+                              ),
+                            ),
+                            Text(
+                              item.$2,
+                              style: AppTextStyles.body.copyWith(
+                                fontSize: 14,
+                                color: const Color(0xFF404944),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: Navigator.of(context).pop,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF002E20),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                    'Got it',
+                    style: AppTextStyles.body.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-
-          SafeArea(
-            child: Column(
-              children: [
-                // Top navigation
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0,
-                    vertical: 16.0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const SizedBox(width: 48),
-                      // Logo
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.eco,
-                            color: Color(0xFF007f80),
-                            size: 24,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'EcoAlert',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Skip button
-                      TextButton(
-                        onPressed: _skipOnboarding,
-                        child: Text(
-                          'Skip',
-                          style: TextStyle(
-                            color: const Color(0xFF9abcbc),
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // PageView
-                Expanded(
-                  child: PageView(
-                    controller: _pageController,
-                    onPageChanged: (index) {
-                      setState(() {
-                        _currentPage = index;
-                      });
-                    },
-                    children: [
-                      _buildPage1(),
-                      _buildPage2(),
-                      _buildPage3(),
-                      _buildPage4(),
-                    ],
-                  ),
-                ),
-
-                // Bottom navigation
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Page indicators
-                      Row(
-                        children: List.generate(4, (index) {
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            margin: const EdgeInsets.only(right: 8),
-                            width: _currentPage == index ? 32 : 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: _currentPage == index
-                                  ? const Color(0xFF007f80)
-                                  : const Color(0xFF334444),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          );
-                        }),
-                      ),
-
-                      // Next button
-                      GestureDetector(
-                        onTap: _nextPage,
-                        child: Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF007f80),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                    const Color(0xFF007f80).withOpacity(0.3),
-                                blurRadius: 20,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.arrow_forward,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildPage1() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  @override
+  Widget build(BuildContext context) {
+    const primary = Color(0xFF002E20);
+    const primaryFixed = Color(0xFFB6EFD5);
+    const onSurface = Color(0xFF181D1A);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          // Hero illustration
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // Outer glow
-              Container(
-                width: 320,
-                height: 320,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF007f80).withOpacity(0.2),
-                      blurRadius: 100,
-                      spreadRadius: 40,
-                    ),
+          Positioned.fill(
+            child: Image.network(
+              'https://lh3.googleusercontent.com/aida/ADBb0uithJKX56sGdCyVF-vM5v9HxltUMqHe8Y--POBxm__wuXAWnAjFF6o0-7ZxMnY4MJa8Yj37vD6yiomsnV_gA08bo9UkoHzrnGYX8bHSL6iLdV3rqhBFlsA_cbOZUiKsrwtzEFaScseG5PTJjYCBzDwhV9cG36H2qUnPvyELKMRQME03LlGmyAqdA2BjJYthM9GXGNL_qKywHKV00l-2Slx9FnrrYusFehk_nerf_fWb1oejgUYyF7fTeg',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(color: Colors.black),
+            ),
+          ),
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.25),
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.355),
                   ],
                 ),
               ),
-              // Inner glow
-              Container(
-                width: 240,
-                height: 240,
+            ),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.95),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.eco, color: primary, size: 28),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'EcoAlert',
+                        style: AppTextStyles.headline.copyWith(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.02 * 24,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.5),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 64),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: primary,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      'Environmental Intelligence',
+                      style: AppTextStyles.label.copyWith(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 3.0,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  RichText(
+                    text: TextSpan(
+                      style: AppTextStyles.headline.copyWith(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w300,
+                        letterSpacing: -0.02 * 48,
+                        color: Colors.white,
+                        height: 1.1,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withOpacity(0.5),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      children: [
+                        const TextSpan(text: 'Protect Your '),
+                        TextSpan(
+                          text: 'Tomorrow',
+                          style: AppTextStyles.headline.copyWith(
+                            fontSize: 48,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.02 * 48,
+                            color: primaryFixed,
+                          ),
+                        ),
+                        const TextSpan(text: ', Today.'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'EcoAlert provides real-time predictions and alerts for smog, flooding, and cloudbursts across Pakistan, keeping you and your family safe.',
+                    style: AppTextStyles.body.copyWith(
+                      fontSize: 18,
+                      color: Colors.white.withOpacity(0.9),
+                      height: 1.5,
+                      fontWeight: FontWeight.w500,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    maxLines: 4,
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _handleGetStarted,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primary,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 12,
+                        shadowColor: primary.withOpacity(0.4),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Get Started',
+                            style: AppTextStyles.headline.copyWith(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Icon(Icons.arrow_forward, color: Colors.white, size: 22),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _handleLearnMore,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white.withOpacity(0.7),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 8,
+                        shadowColor: Colors.black.withOpacity(0.2),
+                      ),
+                      child: Text(
+                        'Learn More',
+                        style: AppTextStyles.headline.copyWith(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: onSurface,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _FeatureCard(
+                          icon: Icons.cloud,
+                          title: 'Smog',
+                          description: 'Air quality tracking',
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _FeatureCard(
+                          icon: Icons.water_damage,
+                          title: 'Flooding',
+                          description: 'Early rise detection',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  Divider(color: Colors.white.withOpacity(0.2)),
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: primary.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.bolt, color: primaryFixed, size: 20),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Instant Notifications',
+                              style: AppTextStyles.headline.copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Receive alerts via SMS and Push before disaster strikes.',
+                              style: AppTextStyles.body.copyWith(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 64),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.33,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
                     colors: [
-                      const Color(0xFF007f80).withOpacity(0.1),
+                      Colors.black.withOpacity(0.5),
                       Colors.transparent,
                     ],
                   ),
                 ),
               ),
-              // Radar circles
-              ...List.generate(3, (index) {
-                return AnimatedContainer(
-                  duration: Duration(milliseconds: 2000 + (index * 500)),
-                  curve: Curves.easeInOut,
-                  width: 100.0 + (index * 50),
-                  height: 100.0 + (index * 50),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF007f80).withOpacity(0.3 - index * 0.1),
-                      width: 2,
-                    ),
-                  ),
-                );
-              }),
-              // Center icon
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF152e2e),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF007f80).withOpacity(0.2),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 20,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.notifications_active,
-                  color: Color(0xFF007f80),
-                  size: 40,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 60),
-
-          // Typography
-          RichText(
-            textAlign: TextAlign.center,
-            text: const TextSpan(
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                height: 1.1,
-                letterSpacing: -0.5,
-              ),
-              children: [
-                TextSpan(
-                  text: 'Stay Ahead of the ',
-                  style: TextStyle(color: Colors.white),
-                ),
-                TextSpan(
-                  text: 'Storm',
-                  style: TextStyle(color: Color(0xFF007f80)),
-                ),
-              ],
             ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Text(
-            'Receive instant, AI-driven notifications for environmental hazards like floods and toxic smog specific to your neighborhood.',
-            style: TextStyle(
-              color: const Color(0xFFaaaaaa),
-              fontSize: 16,
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPage2() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Placeholder for second page illustration
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 320,
-                height: 320,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF007f80).withOpacity(0.2),
-                      blurRadius: 100,
-                      spreadRadius: 40,
-                    ),
-                  ],
-                ),
+class _FeatureCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+
+  const _FeatureCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.755),
+          border: Border.all(color: Colors.white.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF002E20).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
               ),
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF152e2e),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF007f80).withOpacity(0.2),
-                    width: 2,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.analytics,
-                  color: Color(0xFF007f80),
-                  size: 40,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 60),
-
-          const Text(
-            'Real-time Intelligence',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              height: 1.1,
-              letterSpacing: -0.5,
+              child: Icon(icon, color: const Color(0xFF002E20), size: 24),
             ),
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 16),
-
-          Text(
-            'Get accurate predictions and safety recommendations powered by advanced AI algorithms.',
-            style: TextStyle(
-              color: const Color(0xFFaaaaaa),
-              fontSize: 16,
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPage3() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Map visualization card
-          Container(
-            width: double.infinity,
-            height: MediaQuery.of(context).size.height * 0.5,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1a2c2c),
-              borderRadius: BorderRadius.circular(32),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.5),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(32),
-              child: Stack(
-                children: [
-                  // Map background
-                  Container(
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: NetworkImage(
-                          'https://api.mapbox.com/styles/v1/mapbox/dark-v10/static/74.3587,31.5204,11,0/400x600@2x?access_token=${ApiKeys.mapbox}',
-                        ),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-
-                  // Gradient overlay
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF0f2323).withOpacity(0.1),
-                          Colors.transparent,
-                          const Color(0xFF0f2323).withOpacity(0.8),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Hazard indicator
-                  Positioned(
-                    top: 100,
-                    right: 80,
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.flood,
-                            color: Colors.red,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'HAZARD',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Info card at bottom
-                  Positioned(
-                    bottom: 20,
-                    left: 16,
-                    right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1a2c2c).withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.05),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF007f80).withOpacity(0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.alt_route,
-                              color: Color(0xFF007f80),
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Safe Route Found',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  'Avoiding Model Town flood zone',
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF007f80),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.navigation,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 40),
-
-          const Text(
-            'Find Safe Paths',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 16),
-
-          Text(
-            'Real-time maps showing hazard zones and AI-calculated alternative routes to keep you safe from floods and roadblocks.',
-            style: TextStyle(
-              color: const Color(0xFFaaaaaa),
-              fontSize: 16,
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPage4() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Hero illustration card
-          Container(
-            width: double.infinity,
-            constraints: BoxConstraints(
-              maxWidth: 320,
-              maxHeight: MediaQuery.of(context).size.height * 0.4,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1a2c2c).withOpacity(0.3),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.05),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF007f80).withOpacity(0.1),
-                  blurRadius: 40,
-                  spreadRadius: 10,
-                ),
-              ],
-            ),
-            child: Stack(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Gradient overlay
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFF007f80).withOpacity(0.2),
-                        Colors.transparent,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(24),
+                Text(
+                  title,
+                  style: AppTextStyles.headline.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF181D1A),
                   ),
                 ),
-                // Phone illustration
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(40),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 120,
-                          height: 160,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF9abcbc).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: const Color(0xFF9abcbc).withOpacity(0.3),
-                              width: 3,
-                            ),
-                          ),
-                          child: Stack(
-                            children: [
-                              Center(
-                                child: Container(
-                                  width: 60,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF007f80).withOpacity(0.3),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: const Icon(
-                                    Icons.shield,
-                                    color: Color(0xFF007f80),
-                                    size: 32,
-                                  ),
-                                ),
-                              ),
-                              // Small people icons around
-                              Positioned(
-                                top: 20,
-                                left: -8,
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF007f80),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                top: 20,
-                                right: -8,
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF007f80),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 20,
-                                left: 10,
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF007f80),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 20,
-                                right: 10,
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF007f80),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Floating icons
-                Positioned(
-                  bottom: 16,
-                  right: 16,
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF007f80),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0xFF007f80),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.security,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF162e2e).withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF007f80).withOpacity(0.2),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.group,
-                      color: Color(0xFF007f80),
-                      size: 20,
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: AppTextStyles.body.copyWith(
+                    fontSize: 12,
+                    color: const Color(0xFF404944),
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
-          ),
-
-          const SizedBox(height: 40),
-
-          // Typography
-          RichText(
-            textAlign: TextAlign.center,
-            text: const TextSpan(
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                height: 1.1,
-                letterSpacing: -0.5,
-              ),
-              children: [
-                TextSpan(
-                  text: 'Community &\n',
-                  style: TextStyle(color: Colors.white),
-                ),
-                TextSpan(
-                  text: 'Safety First',
-                  style: TextStyle(color: Color(0xFF007f80)),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Text(
-            'Contribute to real-time alerts by reporting hazards. Stay safe with AI-curated guidelines tailored to Pakistan\'s climate.',
-            style: TextStyle(
-              color: const Color(0xFFaaaaaa),
-              fontSize: 16,
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

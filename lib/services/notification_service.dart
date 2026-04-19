@@ -41,8 +41,13 @@ class NotificationService {
     debugPrint('[FCM] Permission status: ${settings.authorizationStatus}');
 
     // Get FCM token.
-    _fcmToken = await _messaging.getToken();
-    debugPrint('[FCM] Token: $_fcmToken');
+    try {
+      _fcmToken = await _messaging.getToken();
+      debugPrint('[FCM] Token: $_fcmToken');
+    } catch (e) {
+      _fcmToken = null;
+      debugPrint('[FCM] Token unavailable on this device: $e');
+    }
 
     // Listen for token refresh.
     _messaging.onTokenRefresh.listen((newToken) {

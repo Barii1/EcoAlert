@@ -15,6 +15,7 @@ dependencies:
   firebase_auth: ^4.16.0
   cloud_firestore: ^4.15.0
   firebase_messaging: ^14.7.10
+  google_sign_in: ^6.2.0
   # firebase_analytics: ^10.8.0      # Enable when needed
   flutter_local_notifications: ^17.0.0
   
@@ -23,6 +24,7 @@ dependencies:
   
   # Maps — OpenStreetMap via flutter_map
   flutter_map: ^7.0.0
+  flutter_map_heatmap: ^0.0.8
   latlong2: ^0.9.0
   flutter_map_cancellable_tile_provider: ^3.0.2
   geolocator: ^10.1.0
@@ -38,6 +40,7 @@ dependencies:
   
   # Local Storage
   shared_preferences: ^2.2.2
+  package_info_plus: 9.0.1
   
   # Utilities
   crypto: ^3.0.3
@@ -48,6 +51,7 @@ dependencies:
   fl_chart: ^0.68.0
   shimmer: ^3.0.0
   share_plus: ^9.0.0
+  vector_math: ^2.2.0
 
 dev_dependencies:
   flutter_test:

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
@@ -10,10 +12,13 @@ import '../providers/aqi_provider.dart';
 import '../providers/flood_provider.dart';
 import '../providers/weather_provider.dart';
 import '../providers/danger_theme_provider.dart';
+import '../providers/connectivity_provider.dart';
 import '../widgets/app_background.dart';
 import '../widgets/aqi_card.dart';
 import '../widgets/flood_risk_card.dart';
 import '../widgets/weather_card.dart';
+import '../widgets/weather_forecast_widget.dart';
+import '../widgets/offline_banner.dart';
 import '../widgets/quick_tip_chip.dart';
 import '../widgets/surface_card.dart';
 import 'alerts_screen.dart';
@@ -29,9 +34,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  Timer? _lastUpdatedTicker;
+
   @override
   void initState() {
     super.initState();
+    _lastUpdatedTicker = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final city = auth.currentUser?.city ?? 'Lahore';
@@ -43,9 +55,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    _lastUpdatedTicker?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final dangerTheme = context.watch<DangerThemeProvider>();
+    final connectivity = context.watch<ConnectivityProvider>();
+    final latestUpdated = _latestDataTimestamp(context);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -53,6 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           child: Column(
             children: [
+              OfflineBanner(
+                isOffline: !connectivity.isOnline,
+                lastUpdated: latestUpdated,
+              ),
               _buildHeader(context, authProvider, dangerTheme),
               Expanded(
                 child: RefreshIndicator(
@@ -84,6 +108,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       // Environmental Conditions (AQI + Flood)
                       _buildEnvironmentSection(context),
+                      const SizedBox(height: AppSpacing.p16),
+
+                      // 3-day weather forecast
+                      _buildForecastSection(context),
+                      _buildLastUpdatedChip(latestUpdated),
                       const SizedBox(height: AppSpacing.p24),
 
                       // Active Alerts
@@ -298,6 +327,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildForecastSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.p16),
+      child: Consumer<WeatherProvider>(
+        builder: (context, weatherProvider, _) {
+          final isOffline = !context.watch<ConnectivityProvider>().isOnline;
+          return WeatherForecastWidget(
+            isLoading: weatherProvider.isLoading,
+            currentWeather: weatherProvider.current,
+            showCachedBadge: isOffline && weatherProvider.current != null,
+          );
+        },
+      ),
+    );
+  }
+
   // ─────────────────── ENVIRONMENT SECTION (AQI + FLOOD) ───────────────────
   Widget _buildEnvironmentSection(BuildContext context) {
     return Column(
@@ -333,6 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (context, aqi, _) {
               return Consumer<FloodProvider>(
                 builder: (context, flood, _) {
+                  final isOffline = !context.watch<ConnectivityProvider>().isOnline;
                   return PageView(
                     padEnds: false,
                     controller: PageController(viewportFraction: 0.88),
@@ -346,11 +392,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? _buildErrorCard(
                                     aqi.errorMessage ?? 'Error', aqi.retry)
                                 : aqi.current != null
-                                    ? AqiCard(
-                                        reading: aqi.current!,
-                                        onTap: () => Navigator.pushNamed(
-                                            context, '/aqi-detail',
-                                            arguments: aqi.current),
+                              ? _withCachedBadge(
+                                showBadge: isOffline,
+                                child: AqiCard(
+                                  reading: aqi.current!,
+                                  onTap: () => Navigator.pushNamed(
+                                    context, '/aqi-detail',
+                                    arguments: aqi.current),
+                                ),
                                       )
                                     : const SizedBox.shrink(),
                       ),
@@ -363,11 +412,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? _buildErrorCard(
                                     flood.errorMessage ?? 'Error', flood.retry)
                                 : flood.risk != null
-                                    ? FloodRiskCard(
-                                        risk: flood.risk!,
-                                        onTap: () => Navigator.pushNamed(
-                                            context, '/flood-detail',
-                                            arguments: flood.risk),
+                              ? _withCachedBadge(
+                                showBadge: isOffline,
+                                child: FloodRiskCard(
+                                  risk: flood.risk!,
+                                  onTap: () => Navigator.pushNamed(
+                                    context, '/flood-detail',
+                                    arguments: flood.risk),
+                                ),
                                       )
                                     : _buildLoadingCard(),
                       ),
@@ -842,6 +894,101 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildLastUpdatedChip(DateTime? timestamp) {
+    if (timestamp == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(
+        top: AppSpacing.p8,
+        left: AppSpacing.p16,
+        right: AppSpacing.p16,
+      ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.bgElevated.withOpacity(0.75),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.schedule_rounded,
+                size: 13,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _formatUpdatedAgo(timestamp),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _withCachedBadge({required Widget child, required bool showBadge}) {
+    if (!showBadge) return child;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(
+          top: 10,
+          right: 10,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.warning.withOpacity(0.35)),
+            ),
+            child: Text(
+              'CACHED',
+              style: AppTextStyles.label.copyWith(
+                color: AppColors.warning,
+                fontSize: 9,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  DateTime? _latestDataTimestamp(BuildContext context) {
+    final aqiTimestamp = context.watch<AqiProvider>().current?.timestamp;
+    final weatherTimestamp = context.watch<WeatherProvider>().current?.timestamp;
+
+    if (aqiTimestamp == null) return weatherTimestamp;
+    if (weatherTimestamp == null) return aqiTimestamp;
+    return aqiTimestamp.isAfter(weatherTimestamp)
+        ? aqiTimestamp
+        : weatherTimestamp;
+  }
+
+  String _formatUpdatedAgo(DateTime timestamp) {
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inMinutes < 60) {
+      final minutes = diff.inMinutes < 1 ? 1 : diff.inMinutes;
+      return 'Updated $minutes minute${minutes == 1 ? '' : 's'} ago';
+    }
+
+    final hours = diff.inHours < 1 ? 1 : diff.inHours;
+    return 'Updated $hours hour${hours == 1 ? '' : 's'} ago';
   }
 }
 

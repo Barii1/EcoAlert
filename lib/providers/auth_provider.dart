@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
@@ -105,22 +106,47 @@ class AuthProvider extends ChangeNotifier {
 
   /// Real Firebase login. Throws on failure so UI can show error.
   Future<void> firebaseLogin(String email, String password) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
     if (_firebaseAuthService == null) {
-      throw FirebaseAuthException(
-        code: 'not-initialized',
-        message: 'Firebase auth is not initialized.',
-      );
+      _isLoading = false;
+      _errorMessage = 'Firebase auth is not initialized.';
+      notifyListeners();
+      throw FirebaseAuthException(code: 'not-initialized', message: _errorMessage);
     }
-    final user = await _firebaseAuthService!.signIn(
-      email: email,
-      password: password,
-    );
-    if (user != null) {
+
+    try {
+      final user = await _firebaseAuthService!.signIn(
+        email: email,
+        password: password,
+      );
+
+      if (user == null) {
+        throw FirebaseAuthException(
+          code: 'login-failed',
+          message: 'Login failed. Please try again.',
+        );
+      }
+
       _isFirebaseUser = true;
-      _firestoreProfile = await _firebaseAuthService!
-          .getUserProfile(user.uid);
+      _firestoreProfile = await _firebaseAuthService!.getUserProfile(user.uid);
       _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
       _isAuthenticated = true;
+      _hasShownUpgradePrompt =
+          _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
+      _errorMessage = null;
+    } on FirebaseAuthException catch (e) {
+      _isAuthenticated = false;
+      _errorMessage = e.message ?? 'Login failed. Please try again.';
+      rethrow;
+    } catch (e) {
+      _isAuthenticated = false;
+      _errorMessage = 'Login failed: $e';
+      rethrow;
+    } finally {
+      _isLoading = false;
       notifyListeners();
       onFirebaseLoginSuccess?.call();
     }
@@ -152,6 +178,7 @@ class AuthProvider extends ChangeNotifier {
       city: city,
     );
     if (user != null) {
+      await user.sendEmailVerification();
       _isFirebaseUser = true;
       _firestoreProfile = await _firebaseAuthService!
           .getUserProfile(user.uid);
@@ -235,33 +262,53 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _authService.signUp(
-        email: email,
-        password: password,
-        username: username,
-        phoneNumber: phoneNumber,
-        cnicNumber: cnicNumber,
-        province: province,
-        city: city,
-      );
-
-      if (result.success && result.user != null) {
-        _currentUser = result.user;
-        _isAuthenticated = true;
-        _isLoading = false;
-        notifyListeners();
+      if (_useFirebase && _firebaseAuthService != null) {
+        await firebaseSignUp(
+          email: email,
+          password: password,
+          username: username,
+          phoneNumber: phoneNumber,
+          cnicNumber: cnicNumber,
+          province: province,
+          city: city,
+        );
+        _errorMessage = null;
         return true;
-      } else {
+      }
+
+      if (kDebugMode) {
+        final result = await _authService.signUp(
+          email: email,
+          password: password,
+          username: username,
+          phoneNumber: phoneNumber,
+          cnicNumber: cnicNumber,
+          province: province,
+          city: city,
+        );
+
+        if (result.success && result.user != null) {
+          _currentUser = result.user;
+          _isAuthenticated = true;
+          _errorMessage = null;
+          return true;
+        }
+
         _errorMessage = result.error ?? 'Signup failed';
-        _isLoading = false;
-        notifyListeners();
         return false;
       }
+
+      _errorMessage = 'Signup is unavailable without Firebase in release mode.';
+      return false;
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = e.message ?? 'Signup failed';
+      return false;
     } catch (e) {
       _errorMessage = 'Signup failed: $e';
+      return false;
+    } finally {
       _isLoading = false;
       notifyListeners();
-      return false;
     }
   }
 
@@ -271,18 +318,67 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _authService.resetPassword(email);
-      _isLoading = false;
-      if (!result.success) {
-        _errorMessage = result.error;
-      }
-      notifyListeners();
-      return result.success;
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+      _errorMessage = null;
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = e.message ?? 'Password reset failed';
+      return false;
     } catch (e) {
       _errorMessage = 'Password reset failed: $e';
+      return false;
+    } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Sign in with Google. Returns true if successful.
+  Future<bool> signInWithGoogle() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    if (_firebaseAuthService == null) {
+      _isLoading = false;
+      _errorMessage = 'Firebase auth is not initialized.';
+      notifyListeners();
       return false;
+    }
+
+    try {
+      final user = await _firebaseAuthService!.signInWithGoogle();
+
+      if (user == null) {
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      _isFirebaseUser = true;
+      _firestoreProfile = await _firebaseAuthService!.getUserProfile(user.uid);
+      _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
+      _isAuthenticated = true;
+      _hasShownUpgradePrompt = _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
+      _errorMessage = null;
+
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = e.message ?? 'Google sign-in failed';
+      return false;
+    } catch (e) {
+      final raw = e.toString();
+      if (raw.contains('ApiException: 10')) {
+        _errorMessage =
+            'Google Sign-In is not configured for this Android build (ApiException 10). '
+            'Add SHA-1/SHA-256 in Firebase, download a fresh google-services.json, and rebuild the app.';
+      } else {
+        _errorMessage = 'Google sign-in failed: $e';
+      }
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

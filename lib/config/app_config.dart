@@ -1,3 +1,7 @@
+import 'package:ecoalert/config/api_keys.dart';
+
+const mapboxAccessToken = ApiKeys.mapbox;
+
 class AppConfig {
   static const String waqiToken = 'f37967aac46dd1682d3d8550091231e6';
   static const String openWeatherApiKey =

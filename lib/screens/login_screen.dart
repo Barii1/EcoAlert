@@ -383,9 +383,9 @@ class _LoginScreenState extends State<LoginScreen>
                                 context, '/navigation');
                           },
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
+                      foregroundColor: const Color(0xFF002E20),
                       side: BorderSide(
-                        color: AppColors.primary.withOpacity(0.4),
+                        color: const Color(0xFF002E20).withOpacity(0.4),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -412,9 +412,9 @@ class _LoginScreenState extends State<LoginScreen>
                                 context, '/navigation');
                           },
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
+                      foregroundColor: const Color(0xFF002E20),
                       side: BorderSide(
-                        color: AppColors.primary.withOpacity(0.4),
+                        color: const Color(0xFF002E20).withOpacity(0.4),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(

@@ -14,7 +14,10 @@ import 'screens/alert_settings_screen.dart';
 import 'screens/learn_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
+import 'screens/email_verification_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/privacy_policy_screen.dart';
+import 'screens/terms_conditions_screen.dart';
 import 'screens/location_prompt_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'screens/alert_detail_screen.dart';
@@ -38,7 +41,6 @@ import 'providers/report_provider.dart';
 import 'providers/danger_theme_provider.dart';
 import 'providers/weather_provider.dart';
 import 'models/user_model.dart';
-import 'widgets/premium_ux.dart';
 import 'utils/page_transitions.dart';
 
 void main() async {
@@ -69,7 +71,7 @@ void main() async {
       firebaseReady ? FirestoreService() : null;
 
   final authProvider = AuthProvider(useFirebase: firebaseReady);
-  await authProvider.initAuth();
+  await authProvider.tryAutoLogin();
 
   final alertProvider = AlertProvider(firestoreService: firestoreService);
   final reportProvider = ReportProvider(firestoreService: firestoreService);
@@ -157,28 +159,35 @@ class EcoAlertApp extends StatelessWidget {
             title: 'EcoAlert',
             debugShowCheckedModeBanner: false,
             onGenerateRoute: (settings) {
-              final routes = <String, Widget>{
-                '/splash': const SplashScreen(),
-                '/onboarding': const OnboardingScreen(),
-                '/location': const LocationPromptScreen(),
-                '/profile-setup': const ProfileSetupScreen(),
-                '/login': const LoginScreen(),
-                '/signup': const SignupScreen(),
-                '/navigation': const MainNavigationScreen(),
-                '/alert-detail': const AlertDetailScreen(),
-                '/alert-settings': const AlertSettingsScreen(),
-                '/route-info': const RouteInfoScreen(),
-                '/report-hazard': const ReportHazardScreen(),
-                '/report-confirmation': const ReportConfirmationScreen(),
-                '/admin': const AdminDashboardScreen(),
-                '/aqi-detail': const AqiDetailScreen(),
-                '/flood-detail': const FloodDetailScreen(),
-                '/aqi-scan': const AqiScanScreen(),
-                '/alerts': const AlertsScreen(),
+              final routes = <String, Widget Function(RouteSettings)>{
+                '/splash': (_) => const SplashScreen(),
+                '/onboarding': (_) => const OnboardingScreen(),
+                '/location': (_) => const LocationPromptScreen(),
+                '/profile-setup': (_) => const ProfileSetupScreen(),
+                '/login': (_) => const LoginScreen(),
+                '/signup': (_) => const SignupScreen(),
+                '/email-verification': (settings) {
+                  final email = settings.arguments as String? ?? 'your email';
+                  return EmailVerificationScreen(email: email);
+                },
+                '/terms': (_) => const TermsConditionsScreen(),
+                '/privacy': (_) => const PrivacyPolicyScreen(),
+                '/navigation': (_) => const MainNavigationScreen(),
+                '/alert-detail': (_) => const AlertDetailScreen(),
+                '/alert-settings': (_) => const AlertSettingsScreen(),
+                '/route-info': (_) => const RouteInfoScreen(),
+                '/report-hazard': (_) => const ReportHazardScreen(),
+                '/report-confirmation': (_) => const ReportConfirmationScreen(),
+                '/admin': (_) => const AdminDashboardScreen(),
+                '/aqi-detail': (_) => const AqiDetailScreen(),
+                '/flood-detail': (_) => const FloodDetailScreen(),
+                '/aqi-scan': (_) => const AqiScanScreen(),
+                '/alerts': (_) => const AlertsScreen(),
               };
 
-              final page = routes[settings.name];
-              if (page == null) return null;
+              final pageBuilder = routes[settings.name];
+              if (pageBuilder == null) return null;
+              final page = pageBuilder(settings);
 
               // Use slide-up for detail/modal screens, fade-through for everything else.
               const slideUpRoutes = {'/alert-detail', '/aqi-detail', '/flood-detail', '/report-hazard', '/aqi-scan'};
@@ -270,23 +279,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final auth = context.read<AuthProvider>();
-      if (!mounted) return;
-
-      // Basic user upsell prompt (demo). Guest/admin/premium don't see it.
-      if (auth.isBasic && !auth.hasShownUpgradePrompt) {
-        auth.markUpgradePromptShown();
-        await showUpgradePromptDialog(context);
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final isPremium = context.watch<AuthProvider>().isPremium;
     final dangerTheme = context.watch<DangerThemeProvider>();
 
     // Update danger theme from AQI data whenever it changes.
@@ -299,11 +292,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const HomeScreen(),
       const MapScreen(),
       const AlertsScreen(),
-      PremiumLock(
-        locked: !isPremium,
-        featureName: 'Community help network & emergency coordination',
-        child: const CommunityScreen(),
-      ),
+      const CommunityScreen(),
       const LearnScreen(),
       const ProfileScreen(),
     ];

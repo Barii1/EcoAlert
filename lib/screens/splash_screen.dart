@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
@@ -67,14 +68,25 @@ class _SplashScreenState extends State<SplashScreen>
     if (_navigated) return;
     if (_progress < 1.0) return;
     _navigated = true;
+    final authProvider = context.read<AuthProvider>();
 
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    final onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
-    final authProvider = context.read<AuthProvider>();
 
-    if (!onboardingComplete) {
-      Navigator.of(context).pushReplacementNamed('/onboarding');
+    // Get current version
+    final packageInfo = await PackageInfo.fromPlatform();
+    final currentVersion = packageInfo.version;
+
+    // Check onboarding conditions
+    final onboardingSeenV1 = prefs.getBool('onboarding_seen_v1') ?? false;
+    final lastSeenVersion = prefs.getString('last_seen_version') ?? '';
+    final versionChanged = lastSeenVersion != currentVersion;
+
+    // Show onboarding if first install OR version changed
+    if (!onboardingSeenV1 || versionChanged) {
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/onboarding');
+      }
       return;
     }
 

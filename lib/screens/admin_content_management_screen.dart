@@ -11,6 +11,90 @@ class AdminContentManagementScreen extends StatefulWidget {
 class _AdminContentManagementScreenState
     extends State<AdminContentManagementScreen> {
   String _selectedFilter = 'All Content';
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  final List<_AdminContentEntry> _allContent = const [
+    _AdminContentEntry(
+      title: 'Surviving Flash Floods',
+      type: 'Safety Guide',
+      city: 'Lahore',
+      description:
+          'Safety steps for flash floods, evacuation, and immediate response for families.',
+      categoryColor: Colors.blue,
+      icon: Icons.flood,
+      timeAgo: 'Updated 2h ago',
+      status: 'Published',
+      statusColor: Colors.green,
+    ),
+    _AdminContentEntry(
+      title: 'Understanding AQI Levels',
+      type: 'Educational',
+      city: 'Karachi',
+      description:
+          'AQI tiers explained with simple actions users should follow during hazardous air.',
+      categoryColor: Colors.orange,
+      icon: Icons.masks,
+      timeAgo: '1 day ago',
+      status: 'Published',
+      statusColor: Colors.green,
+    ),
+    _AdminContentEntry(
+      title: 'Emergency Kit Checklist',
+      type: 'Preparedness',
+      city: 'Islamabad',
+      description:
+          'Checklist for emergency kits including medicine, water, food and flashlight.',
+      categoryColor: Colors.grey,
+      icon: Icons.medical_services,
+      timeAgo: 'Edited 4m ago',
+      status: 'Draft',
+      statusColor: Colors.grey,
+    ),
+    _AdminContentEntry(
+      title: 'Monsoon Warning System',
+      type: 'Announcement',
+      city: 'ALL',
+      description:
+          'Announcement for upcoming monsoon warning rollout and district-level awareness.',
+      categoryColor: Colors.purple,
+      icon: Icons.campaign,
+      timeAgo: 'By Admin',
+      status: 'Archived',
+      statusColor: Colors.yellow,
+      isScheduled: true,
+    ),
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<_AdminContentEntry> get _filteredContent {
+    final query = _searchQuery.trim().toLowerCase();
+    return _allContent.where((item) {
+      if (!_matchesFilter(item)) return false;
+      if (query.isEmpty) return true;
+      return item.type.toLowerCase().contains(query) ||
+          item.city.toLowerCase().contains(query) ||
+          item.description.toLowerCase().contains(query);
+    }).toList(growable: false);
+  }
+
+  bool _matchesFilter(_AdminContentEntry item) {
+    switch (_selectedFilter) {
+      case 'Published':
+        return item.status == 'Published';
+      case 'Drafts':
+        return item.status == 'Draft';
+      case 'Archived':
+        return item.status == 'Archived';
+      default:
+        return true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -188,9 +272,21 @@ class _AdminContentManagementScreenState
 
                     // Search
                     TextField(
+                      controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'Search title, category...',
+                        hintText: 'Search type, city, description...',
                         prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        suffixIcon: _searchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close, color: Colors.grey),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  });
+                                },
+                              ),
                         filled: true,
                         fillColor: const Color(0xFF162e2e),
                         border: OutlineInputBorder(
@@ -205,7 +301,9 @@ class _AdminContentManagementScreenState
                       ),
                       style: const TextStyle(color: Colors.white),
                       onChanged: (value) {
-                        // TODO: Implement search
+                        setState(() {
+                          _searchQuery = value;
+                        });
                       },
                     ),
                     const SizedBox(height: 12),
@@ -240,47 +338,41 @@ class _AdminContentManagementScreenState
                     ),
                     const SizedBox(height: 12),
 
-                    // Article Cards
-                    _buildArticleCard(
-                      title: 'Surviving Flash Floods',
-                      category: 'Safety Guide',
-                      categoryColor: Colors.blue,
-                      icon: Icons.flood,
-                      timeAgo: 'Updated 2h ago',
-                      status: 'Published',
-                      statusColor: Colors.green,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildArticleCard(
-                      title: 'Understanding AQI Levels',
-                      category: 'Educational',
-                      categoryColor: Colors.orange,
-                      icon: Icons.masks,
-                      timeAgo: '1 day ago',
-                      status: 'Published',
-                      statusColor: Colors.green,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildArticleCard(
-                      title: 'Emergency Kit Checklist',
-                      category: 'Preparedness',
-                      categoryColor: Colors.grey,
-                      icon: Icons.medical_services,
-                      timeAgo: 'Edited 4m ago',
-                      status: 'Draft',
-                      statusColor: Colors.grey,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildArticleCard(
-                      title: 'Monsoon Warning System',
-                      category: 'Announcement',
-                      categoryColor: Colors.purple,
-                      icon: Icons.campaign,
-                      timeAgo: 'By Admin',
-                      status: 'Scheduled',
-                      statusColor: Colors.yellow,
-                      isScheduled: true,
-                    ),
+                    if (_filteredContent.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF162e2e),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withOpacity(0.05)),
+                        ),
+                        child: const Text(
+                          'No content found',
+                          style: TextStyle(color: Colors.white70),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    else
+                      ..._filteredContent.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final content = entry.value;
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index == _filteredContent.length - 1 ? 0 : 12,
+                          ),
+                          child: _buildArticleCard(
+                            title: content.title,
+                            category: content.type,
+                            categoryColor: content.categoryColor,
+                            icon: content.icon,
+                            timeAgo: content.timeAgo,
+                            status: content.status,
+                            statusColor: content.statusColor,
+                            isScheduled: content.isScheduled,
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),
@@ -540,4 +632,30 @@ class _AdminContentManagementScreenState
       ),
     );
   }
+}
+
+class _AdminContentEntry {
+  const _AdminContentEntry({
+    required this.title,
+    required this.type,
+    required this.city,
+    required this.description,
+    required this.categoryColor,
+    required this.icon,
+    required this.timeAgo,
+    required this.status,
+    required this.statusColor,
+    this.isScheduled = false,
+  });
+
+  final String title;
+  final String type;
+  final String city;
+  final String description;
+  final Color categoryColor;
+  final IconData icon;
+  final String timeAgo;
+  final String status;
+  final Color statusColor;
+  final bool isScheduled;
 }

@@ -64,6 +64,7 @@ class _AdminReportManagementScreenState
           IconButton(
             icon: const Icon(Icons.calendar_today, color: Colors.white70),
             onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               final range = await showDateRangePicker(
                 context: context,
                 firstDate: DateTime(2020),
@@ -73,14 +74,13 @@ class _AdminReportManagementScreenState
                   child: child!,
                 ),
               );
-              if (range != null && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${range.start} to ${range.end}'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
+              if (range == null) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('${range.start} to ${range.end}'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
           ),
         ],

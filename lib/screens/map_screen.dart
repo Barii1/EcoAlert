@@ -4,12 +4,15 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_colors.dart';
-import '../config/app_spacing.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/aqi_provider.dart';
 import '../providers/connectivity_provider.dart';
+import '../providers/flood_provider.dart';
 import '../providers/location_provider.dart';
 import '../widgets/app_card.dart';
+import '../widgets/map_heatmap_layer.dart';
+import '../widgets/map_legend.dart';
 import '../widgets/premium_ux.dart';
 
 class MapScreen extends StatefulWidget {
@@ -22,9 +25,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   bool _offlineBannerDismissed = false;
-  bool _showFlood = true;
-  bool _showAqi = true;
-  bool _showReports = true;
+  HeatmapMode _heatmapMode = HeatmapMode.aqi;
 
   static final LatLng _lahore = LatLng(31.5204, 74.3587);
 
@@ -41,34 +42,30 @@ class _MapScreenState extends State<MapScreen> {
         borderColor: AppColors.success.withOpacity(0.4),
       ),
     );
-    if (_showFlood) {
-      circles.add(CircleMarker(
-        point: _lahore,
-        radius: 800,
-        useRadiusInMeter: true,
-        color: AppColors.warning.withOpacity(0.25),
-        borderStrokeWidth: 2,
-        borderColor: AppColors.warning,
-      ));
-      circles.add(CircleMarker(
-        point: const LatLng(31.5404, 74.3387),
-        radius: 600,
-        useRadiusInMeter: true,
-        color: AppColors.danger.withOpacity(0.2),
-        borderStrokeWidth: 2,
-        borderColor: AppColors.danger,
-      ));
-    }
-    if (_showAqi) {
-      circles.add(CircleMarker(
-        point: const LatLng(31.5050, 74.3700),
-        radius: 500,
-        useRadiusInMeter: true,
-        color: AppColors.info.withOpacity(0.15),
-        borderStrokeWidth: 2,
-        borderColor: AppColors.info,
-      ));
-    }
+    circles.add(CircleMarker(
+      point: _lahore,
+      radius: 800,
+      useRadiusInMeter: true,
+      color: AppColors.warning.withOpacity(0.25),
+      borderStrokeWidth: 2,
+      borderColor: AppColors.warning,
+    ));
+    circles.add(CircleMarker(
+      point: const LatLng(31.5404, 74.3387),
+      radius: 600,
+      useRadiusInMeter: true,
+      color: AppColors.danger.withOpacity(0.2),
+      borderStrokeWidth: 2,
+      borderColor: AppColors.danger,
+    ));
+    circles.add(CircleMarker(
+      point: const LatLng(31.5050, 74.3700),
+      radius: 500,
+      useRadiusInMeter: true,
+      color: AppColors.info.withOpacity(0.15),
+      borderStrokeWidth: 2,
+      borderColor: AppColors.info,
+    ));
     return circles;
   }
 
@@ -104,85 +101,19 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _showRiskZoneDetail() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.bgCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(AppSpacing.p20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.danger.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.warning,
-                      color: AppColors.danger, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('High Risk Zone',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(color: AppColors.textPrimary)),
-                      Text('Flood zone — Ravi River banks',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: AppColors.textSecondary)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('View on Map'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.pushNamed(context, '/route-info');
-                    },
-                    child: const Text('Get Safe Route'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final role = context.watch<AuthProvider>().currentRole;
+    final aqiProvider = context.watch<AqiProvider>();
+    final floodProvider = context.watch<FloodProvider>();
     final isGeneral = role == UserRole.general;
     final isPremium = role == UserRole.premium;
     final locPos = context.watch<LocationProvider>().currentPosition;
     final userPoint =
         locPos != null ? LatLng(locPos.latitude, locPos.longitude) : _lahore;
+    final isHeatmapLoading = _heatmapMode == HeatmapMode.aqi
+      ? aqiProvider.isLoading
+      : floodProvider.isLoading;
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -202,6 +133,16 @@ class _MapScreenState extends State<MapScreen> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.ecoalert.app',
               ),
+              if (!isHeatmapLoading)
+                RepaintBoundary(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    child: MapHeatmapLayer(
+                      key: ValueKey(_heatmapMode),
+                      mode: _heatmapMode,
+                    ),
+                  ),
+                ),
               CircleLayer(
                 circles: _buildHazardCircles(userPoint),
               ),
@@ -244,11 +185,23 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ],
           ),
+          if (isHeatmapLoading)
+            const Positioned.fill(
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            ),
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 16,
             right: 16,
             child: _buildOfflineIndicator(context),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 58,
+            left: 0,
+            right: 0,
+            child: Center(child: _buildModeSegmentedControl()),
           ),
           SafeArea(
             child: Padding(
@@ -306,98 +259,51 @@ class _MapScreenState extends State<MapScreen> {
             right: 16,
             child: SafeArea(
               top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      AppCard(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Hazard Zones',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(color: AppColors.textPrimary),
+                  MapLegend(mode: _heatmapMode),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppCard(
+                      padding: const EdgeInsets.all(12),
+                      onTap: () => Navigator.pushNamed(context, '/route-info'),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            const SizedBox(height: 8),
-                            _legendRow(AppColors.success, 'Safe Zone (500m)'),
-                            const SizedBox(height: 4),
-                            _legendRow(AppColors.danger, 'High Risk'),
-                            const SizedBox(height: 4),
-                            _legendRow(AppColors.warning, 'Medium Risk'),
-                            const SizedBox(height: 4),
-                            _legendRow(AppColors.info, 'Safe Route'),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: AppCard(
-                          padding: const EdgeInsets.all(12),
-                          onTap: () =>
-                              Navigator.pushNamed(context, '/route-info'),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.success.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.navigation,
-                                    color: AppColors.success, size: 20),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Safe Routes',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleSmall
-                                          ?.copyWith(
-                                              color: AppColors.textPrimary),
-                                    ),
-                                    Text(
-                                      'Available',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                              color: AppColors.textSecondary),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                            child: const Icon(Icons.navigation,
+                                color: AppColors.success, size: 20),
                           ),
-                        ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Safe Routes',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(color: AppColors.textPrimary),
+                                ),
+                                Text(
+                                  'Available',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  AppCard(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        _layerToggle('Flood', _showFlood,
-                            (v) => setState(() => _showFlood = v)),
-                        const SizedBox(width: 12),
-                        _layerToggle('AQI', _showAqi,
-                            (v) => setState(() => _showAqi = v)),
-                        const SizedBox(width: 12),
-                        _layerToggle('Reports', _showReports,
-                            (v) => setState(() => _showReports = v)),
-                      ],
                     ),
                   ),
                 ],
@@ -409,58 +315,57 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _legendRow(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        Text(label,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: AppColors.textSecondary)),
-      ],
+  Widget _buildModeSegmentedControl() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface.withOpacity(0.84),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _modePill(
+            label: 'AQI',
+            active: _heatmapMode == HeatmapMode.aqi,
+            onTap: () => setState(() => _heatmapMode = HeatmapMode.aqi),
+          ),
+          const SizedBox(width: 6),
+          _modePill(
+            label: 'Flood Risk',
+            active: _heatmapMode == HeatmapMode.floodRisk,
+            onTap: () => setState(() => _heatmapMode = HeatmapMode.floodRisk),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _layerToggle(String label, bool value, ValueChanged<bool> onChanged) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => onChanged(!value),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: Checkbox(
-                value: value,
-                onChanged: (_) => onChanged(!value),
-                activeColor: AppColors.primary,
-                fillColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected))
-                    return AppColors.primary;
-                  return AppColors.borderSubtle;
-                }),
+  Widget _modePill({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: active ? AppColors.primary : AppColors.borderSubtle,
+          ),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: active ? AppColors.textInverse : AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.textPrimary),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
         ),
       ),
     );

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../config/app_colors.dart';
-import '../config/app_spacing.dart';
 import 'app_card.dart';
 
 /// Use for regular content cards — Deep Ocean design.
@@ -20,7 +18,7 @@ class SurfaceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: padding ?? const EdgeInsets.all(AppSpacing.p16),
+      padding: padding ?? const EdgeInsets.all(16),
       onTap: onTap,
       child: child,
     );
