@@ -1,5 +1,6 @@
 ﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../utils/hash_utils.dart';
 
 class FirebaseAuthService {
@@ -67,6 +68,49 @@ class FirebaseAuthService {
 
   Future<void> signOut() async {
     await _auth.signOut();
+    await GoogleSignIn().signOut();
+  }
+
+  // ─── Google Sign-In ──────────────────────────────────────────
+
+  /// Sign in with Google. Returns User on success or null on failure/cancellation.
+  Future<User?> signInWithGoogle() async {
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return null; // User cancelled
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+
+      // If new user, create Firestore profile
+      if (userCredential.additionalUserInfo?.isNewUser ?? false) {
+        if (user != null) {
+          await _db.collection('users').doc(user.uid).set({
+            'id': user.uid,
+            'username': googleUser.displayName ?? 'User',
+            'email': googleUser.email,
+            'phoneNumber': '',
+            'cnicHash': '',
+            'province': '',
+            'city': '',
+            'createdAt': FieldValue.serverTimestamp(),
+            'role': 'user',
+            'fcmToken': null,
+            'photoUrl': googleUser.photoUrl,
+          });
+        }
+      }
+
+      return user;
+    } catch (e) {
+      rethrow;
+    }
   }
 
   // ─── Profile ─────────────────────────────────────────────────

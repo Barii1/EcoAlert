@@ -3,4 +3,4 @@
 
 import 'package:ecoalert/config/api_keys.dart';
 
-final String mapboxAccessToken = ApiKeys.mapbox;
+const mapboxAccessToken = ApiKeys.mapbox;

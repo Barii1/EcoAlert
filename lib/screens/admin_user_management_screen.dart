@@ -10,6 +10,78 @@ class AdminUserManagementScreen extends StatefulWidget {
 
 class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
   String _selectedFilter = 'All Users';
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  final List<_AdminUserEntry> _allUsers = const [
+    _AdminUserEntry(
+      name: 'Ahmed Malik',
+      email: 'ahmed.m@gmail.com',
+      status: 'Active',
+      timeAgo: 'Joined 2h ago',
+      initials: 'AM',
+      gradientColors: [Color(0xFF2196F3), Color(0xFF1E88E5)],
+    ),
+    _AdminUserEntry(
+      name: 'User_7822',
+      email: 'unknown@temp.mail',
+      status: 'Suspended',
+      timeAgo: 'Oct 12',
+      isSuspended: true,
+    ),
+    _AdminUserEntry(
+      name: 'Fatima Khan',
+      email: 'f.khan.dev@yahoo.com',
+      status: 'Active',
+      timeAgo: 'Joined Yesterday',
+      initials: 'FK',
+      gradientColors: [Color(0xFF04B2B2), Color(0xFF06E0E0)],
+    ),
+    _AdminUserEntry(
+      name: 'Admin Support',
+      email: 'support@ecoalert.pk',
+      status: 'STAFF',
+      timeAgo: 'Online',
+      isStaff: true,
+    ),
+    _AdminUserEntry(
+      name: 'M. Zahid',
+      email: 'zahid123@gmail.com',
+      status: 'Offline',
+      timeAgo: '3d ago',
+      initials: 'MZ',
+    ),
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<_AdminUserEntry> get _filteredUsers {
+    final query = _searchQuery.trim().toLowerCase();
+    return _allUsers.where((user) {
+      final matchesFilter = _matchesFilter(user);
+      if (!matchesFilter) return false;
+      if (query.isEmpty) return true;
+      return user.name.toLowerCase().contains(query) ||
+          user.email.toLowerCase().contains(query);
+    }).toList(growable: false);
+  }
+
+  bool _matchesFilter(_AdminUserEntry user) {
+    switch (_selectedFilter) {
+      case 'Active':
+        return user.status == 'Active';
+      case 'Suspended':
+        return user.isSuspended;
+      case 'Moderators':
+        return user.isStaff;
+      default:
+        return true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,9 +149,21 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                   children: [
                     // Search
                     TextField(
+                      controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Search by name or email...',
                         prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        suffixIcon: _searchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close, color: Colors.grey),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  });
+                                },
+                              ),
                         filled: true,
                         fillColor: const Color(0xFF162e2e),
                         border: OutlineInputBorder(
@@ -94,7 +178,9 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                       ),
                       style: const TextStyle(color: Colors.white),
                       onChanged: (value) {
-                        // TODO: Implement search
+                        setState(() {
+                          _searchQuery = value;
+                        });
                       },
                     ),
                     const SizedBox(height: 12),
@@ -203,56 +289,42 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // User Cards
-                    _buildUserCard(
-                      name: 'Ahmed Malik',
-                      email: 'ahmed.m@gmail.com',
-                      status: 'Active',
-                      statusColor: Colors.green,
-                      timeAgo: 'Joined 2h ago',
-                      initials: 'AM',
-                      gradientColors: [Colors.blue, Colors.blue.shade600],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildUserCard(
-                      name: 'User_7822',
-                      email: 'unknown@temp.mail',
-                      status: 'Suspended',
-                      statusColor: Colors.red,
-                      timeAgo: 'Oct 12',
-                      isSuspended: true,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildUserCard(
-                      name: 'Fatima Khan',
-                      email: 'f.khan.dev@yahoo.com',
-                      status: 'Active',
-                      statusColor: Colors.green,
-                      timeAgo: 'Joined Yesterday',
-                      initials: 'FK',
-                      gradientColors: [
-                        const Color(0xFF04b2b2),
-                        const Color(0xFF06e0e0),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildUserCard(
-                      name: 'Admin Support',
-                      email: 'support@ecoalert.pk',
-                      status: 'STAFF',
-                      statusColor: Colors.purple,
-                      timeAgo: 'Online',
-                      isStaff: true,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildUserCard(
-                      name: 'M. Zahid',
-                      email: 'zahid123@gmail.com',
-                      status: 'Offline',
-                      statusColor: Colors.grey,
-                      timeAgo: '3d ago',
-                      initials: 'MZ',
-                    ),
+                    if (_filteredUsers.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF162e2e),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withOpacity(0.05)),
+                        ),
+                        child: const Text(
+                          'No users found',
+                          style: TextStyle(color: Colors.white70),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    else
+                      ..._filteredUsers.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final user = entry.value;
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index == _filteredUsers.length - 1 ? 0 : 12,
+                          ),
+                          child: _buildUserCard(
+                            name: user.name,
+                            email: user.email,
+                            status: user.status,
+                            statusColor: user.statusColor,
+                            timeAgo: user.timeAgo,
+                            initials: user.initials,
+                            gradientColors: user.gradientColors,
+                            isSuspended: user.isSuspended,
+                            isStaff: user.isStaff,
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),
@@ -547,5 +619,40 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
         ),
       ),
     );
+  }
+}
+
+class _AdminUserEntry {
+  const _AdminUserEntry({
+    required this.name,
+    required this.email,
+    required this.status,
+    required this.timeAgo,
+    this.initials,
+    this.gradientColors,
+    this.isSuspended = false,
+    this.isStaff = false,
+  });
+
+  final String name;
+  final String email;
+  final String status;
+  final String timeAgo;
+  final String? initials;
+  final List<Color>? gradientColors;
+  final bool isSuspended;
+  final bool isStaff;
+
+  Color get statusColor {
+    switch (status) {
+      case 'Active':
+        return Colors.green;
+      case 'Suspended':
+        return Colors.red;
+      case 'STAFF':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
   }
 }

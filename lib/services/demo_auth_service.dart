@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 import '../models/user_model.dart';
 import 'auth_service.dart';
 
@@ -10,33 +12,37 @@ class DemoAuthService implements AuthService {
   Future<AuthResult> signIn(String email, String password) async {
     await Future.delayed(const Duration(seconds: 1));
 
-    if (password != 'password123') {
-      return AuthResult.fail('Invalid email or password');
+    if (kDebugMode) {
+      if (password != 'password123') {
+        return AuthResult.fail('Invalid email or password');
+      }
+
+      final normalized = email.trim().toLowerCase();
+      final UserRole role;
+      if (normalized.contains('admin')) {
+        role = UserRole.admin;
+      } else if (normalized.contains('premium')) {
+        role = UserRole.premium;
+      } else {
+        role = UserRole.registered;
+      }
+
+      _currentUser = UserModel(
+        id: 'demo-${DateTime.now().millisecondsSinceEpoch}',
+        username: role == UserRole.admin ? 'admin_user' : normalized.split('@')[0],
+        email: normalized,
+        phoneNumber: '03001234567',
+        cnicNumber: '12345-1234567-1',
+        province: 'Punjab',
+        city: 'Lahore',
+        createdAt: DateTime.now(),
+        role: role,
+      );
+
+      return AuthResult.ok(_currentUser!);
     }
 
-    final normalized = email.trim().toLowerCase();
-    final UserRole role;
-    if (normalized.contains('admin')) {
-      role = UserRole.admin;
-    } else if (normalized.contains('premium')) {
-      role = UserRole.premium;
-    } else {
-      role = UserRole.registered;
-    }
-
-    _currentUser = UserModel(
-      id: 'demo-${DateTime.now().millisecondsSinceEpoch}',
-      username: role == UserRole.admin ? 'admin_user' : normalized.split('@')[0],
-      email: normalized,
-      phoneNumber: '03001234567',
-      cnicNumber: '12345-1234567-1',
-      province: 'Punjab',
-      city: 'Lahore',
-      createdAt: DateTime.now(),
-      role: role,
-    );
-
-    return AuthResult.ok(_currentUser!);
+    return AuthResult.fail('Demo authentication is disabled in release mode');
   }
 
   @override

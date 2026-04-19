@@ -16,17 +16,87 @@ class TermsConditionsScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
           _Card(
-            child: Text(
-              'Demo terms summary\n\n'
-              '• This app is a demo prototype for showcasing UI and flows.\n'
-              '• Alerts and AI analysis are simulated and must not be treated as real emergency guidance.\n'
-              '• Always follow official government and emergency services instructions.\n\n'
-              'In a production build, this page would include full terms, disclaimers, and liability limits.',
-              style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.45),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSection(
+                  'Disclaimer',
+                  'EcoAlert provides environmental hazard predictions and alerts to help users stay informed and safe. '
+                  'Our alerts are AI-generated predictions based on available data and are NOT official government warnings. '
+                  'Always follow instructions from Pakistan Meteorological Department (PMD), National Disaster Management Authority (NDMA), '
+                  'and local emergency services. EcoAlert is not liable for any loss, injury, or damage resulting from actions taken or not taken based on our alerts.',
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  'Data Collection',
+                  'EcoAlert collects your location data to provide location-specific hazard alerts. '
+                  'We collect your email for account recovery. Your CNIC (National ID) is hashed and never stored in plain text. '
+                  'Phone number is used for future SMS alert features. Data is stored securely on Firebase and is never sold to third parties.',
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  'Acceptable Use',
+                  '• You may not use EcoAlert to harass, threaten, or harm others.\n'
+                  '• You may not submit false or misleading hazard reports.\n'
+                  '• You may not reverse-engineer, decompile, or attempt to access our proprietary systems.\n'
+                  '• You may not use automated tools to scrape our app or servers.\n'
+                  '• You may not resell or republish EcoAlert content without permission.',
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  'User Responsibilities',
+                  '• You are responsible for maintaining the confidentiality of your account credentials.\n'
+                  '• You agree to provide accurate and complete information during signup.\n'
+                  '• You are responsible for all activities that occur under your account.\n'
+                  '• You agree to keep your contact information up to date.',
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  'Limitation of Liability',
+                  'EcoAlert is provided on an "AS-IS" basis. We make no warranties that our app will be error-free, uninterrupted, or fit for your specific purposes. '
+                  'To the maximum extent permitted by Pakistani law, EcoAlert and its creators shall not be liable for any indirect, incidental, special, consequential, or punitive damages.',
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  'Changes to Terms',
+                  'We reserve the right to modify these Terms and Conditions at any time. Your continued use of EcoAlert constitutes acceptance of updated terms. '
+                  'Material changes will be notified to users via in-app notification or email.',
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Last updated: April 2026',
+                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSection(String title, String content) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          content,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+            fontSize: 12,
+            height: 1.5,
+          ),
+        ),
+      ],
     );
   }
 }

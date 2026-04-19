@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/report_provider.dart';
-import '../widgets/premium_ux.dart';
 
 class ReportConfirmationScreen extends StatelessWidget {
   const ReportConfirmationScreen({super.key});
@@ -173,39 +172,35 @@ class ReportConfirmationScreen extends StatelessWidget {
                             ),
                             if (!isPremium) ...[
                               const SizedBox(height: 10),
-                              PremiumLock(
-                                locked: true,
-                                featureName: 'Geo-based warnings & neighbor notifications',
-                                child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0f2323),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: Colors.white.withOpacity(0.06),
-                                    ),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0f2323),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.06),
                                   ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(
-                                        Icons.notifications_active,
-                                        color: Color(0xFF06e0e0),
-                                        size: 18,
-                                      ),
-                                      SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          'Instant geo alerts to nearby users',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.notifications_active,
+                                      color: Color(0xFF06e0e0),
+                                      size: 18,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Instant geo alerts to nearby users',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      Icon(Icons.lock, color: Colors.white54, size: 18),
-                                    ],
-                                  ),
+                                    ),
+                                    Icon(Icons.lock, color: Colors.white54, size: 18),
+                                  ],
                                 ),
                               ),
                             ],

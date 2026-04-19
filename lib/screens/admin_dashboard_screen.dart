@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
+import '../config/city_mappings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/report_provider.dart';
 import '../models/hazard_report_model.dart';
@@ -18,46 +20,253 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _currentIndex = 0;
+  final GlobalKey<FormState> _broadcastFormKey = GlobalKey<FormState>();
+  final TextEditingController _broadcastTitleController =
+      TextEditingController();
+  final TextEditingController _broadcastDescriptionController =
+      TextEditingController();
+  String? _selectedBroadcastCity;
+  bool _isSendingBroadcast = false;
+
+  @override
+  void dispose() {
+    _broadcastTitleController.dispose();
+    _broadcastDescriptionController.dispose();
+    super.dispose();
+  }
 
   void _showEmergencyBroadcastDialog(BuildContext context) {
+    _broadcastTitleController.clear();
+    _broadcastDescriptionController.clear();
+    _selectedBroadcastCity = null;
+
     showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.bgCard,
+              title: const Text(
+                'Emergency Broadcast',
+                style: TextStyle(color: AppColors.textPrimary),
+              ),
+              content: Form(
+                key: _broadcastFormKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: _broadcastTitleController,
+                        style: const TextStyle(color: AppColors.textPrimary),
+                        decoration: const InputDecoration(
+                          labelText: 'Title',
+                          hintText: 'Enter emergency alert title',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Title is required';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _broadcastDescriptionController,
+                        maxLines: 4,
+                        style: const TextStyle(color: AppColors.textPrimary),
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          hintText: 'Describe the emergency and instructions',
+                        ),
+                        validator: (value) {
+                          final text = value?.trim() ?? '';
+                          if (text.isEmpty) {
+                            return 'Description is required';
+                          }
+                          if (text.length < 20) {
+                            return 'Description must be at least 20 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: _selectedBroadcastCity,
+                        decoration: const InputDecoration(
+                          labelText: 'City',
+                        ),
+                        dropdownColor: AppColors.bgCard,
+                        items: <String>['ALL', ...CityMappings.allCities]
+                            .map(
+                              (city) => DropdownMenuItem<String>(
+                                value: city,
+                                child: Text(
+                                  city,
+                                  style: const TextStyle(
+                                      color: AppColors.textPrimary),
+                                ),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            _selectedBroadcastCity = value;
+                          });
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please select a city';
+                          }
+                          final validCities = <String>{
+                            'ALL',
+                            ...CityMappings.allCities,
+                          };
+                          if (!validCities.contains(value)) {
+                            return 'Select a valid city';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _isSendingBroadcast
+                      ? null
+                      : () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: _isSendingBroadcast
+                      ? null
+                      : () async {
+                          final form = _broadcastFormKey.currentState;
+                          if (form == null || !form.validate()) {
+                            return;
+                          }
+                          final title = _broadcastTitleController.text.trim();
+                          final description =
+                              _broadcastDescriptionController.text.trim();
+                          final city = _selectedBroadcastCity ?? 'ALL';
+
+                          final shouldSend = await _showBroadcastConfirmation(
+                            context,
+                            city,
+                          );
+                          if (!shouldSend) return;
+
+                          if (!context.mounted || !mounted) return;
+                          Navigator.of(context).pop();
+                          await _sendEmergencyBroadcast(
+                            title: title,
+                            description: description,
+                            city: city,
+                          );
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.danger,
+                  ),
+                  child: const Text('Send Alert'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _showBroadcastConfirmation(
+      BuildContext context, String city) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.bgCard,
         title: const Text(
-          'Emergency Broadcast',
+          'Confirm Emergency Broadcast',
           style: TextStyle(color: AppColors.textPrimary),
         ),
-        content: const Text(
-          'This will send a nationwide Red Alert to all users. Are you sure you want to proceed?',
-          style: TextStyle(color: AppColors.textSecondary),
+        content: Text(
+          'Send emergency alert to all users in $city? This cannot be undone.',
+          style: const TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text(
               'Cancel',
               style: TextStyle(color: AppColors.textSecondary),
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Emergency broadcast sent (Demo)'),
-                  backgroundColor: AppColors.danger,
-                ),
-              );
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.danger,
+              foregroundColor: AppColors.textPrimary,
             ),
-            child: const Text('Send Alert'),
+            child: const Text('Confirm'),
           ),
         ],
       ),
     );
+
+    return confirmed ?? false;
+  }
+
+  Future<void> _sendEmergencyBroadcast(
+    {
+    required String title,
+    required String description,
+    required String city,
+  }) async {
+    if (_isSendingBroadcast) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    setState(() {
+      _isSendingBroadcast = true;
+    });
+
+    try {
+      await FirebaseFirestore.instance.collection('alerts').add({
+        'type': 'emergency',
+        'title': title,
+        'description': description,
+        'city': city,
+        'timestamp': FieldValue.serverTimestamp(),
+        'severity': 'CRITICAL',
+        'isActive': true,
+      });
+
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Emergency broadcast sent'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Failed to send broadcast — try again'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingBroadcast = false;
+        });
+      }
+    }
   }
 
   @override

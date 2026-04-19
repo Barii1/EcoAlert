@@ -100,6 +100,37 @@ lib/
    - Cloud Functions
    - Cloud Messaging
 
+### Fixing Google Sign-In ApiException 10 (Android)
+
+If you see `ApiException: 10` on Android, the Firebase/Google Sign-In Android
+configuration is incomplete.
+
+1. Check your Android package name in `android/app/build.gradle.kts`
+2. Generate SHA fingerprints:
+```bash
+cd android
+./gradlew signingReport
+```
+On Windows PowerShell:
+```powershell
+cd android
+.\gradlew signingReport
+```
+3. In Firebase Console -> Project settings -> Your Android app:
+    - Add debug SHA-1
+    - Add debug SHA-256
+4. Ensure Google Sign-In provider is enabled in Firebase Authentication
+5. Re-download `google-services.json` and replace `android/app/google-services.json`
+6. Run:
+```bash
+flutter clean
+flutter pub get
+flutter run
+```
+
+Tip: if `android/app/google-services.json` has an empty `oauth_client` array,
+your SHA fingerprints were not configured when the file was generated.
+
 ## Deployment
 
 ### Android

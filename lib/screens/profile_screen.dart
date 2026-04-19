@@ -7,7 +7,6 @@ import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/theme_provider.dart';
-import '../widgets/premium_ux.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_conditions_screen.dart';
 
@@ -141,16 +140,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                     ),
                                   ),
-                                  TextButton(
-                                    onPressed: () => showUpgradePromptDialog(context),
-                                    child: const Text(
-                                      'Upgrade',
-                                      style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -268,53 +257,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const SizedBox(height: 12),
                                 SizedBox(
                                   width: double.infinity,
-                                  child: PremiumLock(
-                                    locked: !isPremium,
-                                    featureName: 'Use Current Location (GPS) & geo-based warnings',
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            AppColors.danger,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          AppColors.danger,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
                                       ),
-                                      onPressed: () async {
-                                        final loc = context.read<LocationProvider>();
-                                        await loc.getCurrentLocation();
-                                        if (mounted) {
-                                          setState(() => _location = loc.currentCity);
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Location updated to ${loc.currentCity}'),
-                                              backgroundColor: AppColors.bgElevated,
-                                              behavior: SnackBarBehavior.floating,
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(
-                                            Icons.my_location,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    onPressed: () async {
+                                      final messenger = ScaffoldMessenger.of(context);
+                                      final loc = context.read<LocationProvider>();
+                                      await loc.getCurrentLocation();
+                                      if (!mounted) return;
+                                      setState(() => _location = loc.currentCity);
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text('Location updated to ${loc.currentCity}'),
+                                          backgroundColor: AppColors.bgElevated,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    },
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.my_location,
+                                          color: AppColors.textInverse,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Use Current Location',
+                                          style: AppTextStyles.label.copyWith(
                                             color: AppColors.textInverse,
+                                            fontWeight: FontWeight.bold,
                                           ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'Use Current Location',
-                                            style: AppTextStyles.label.copyWith(
-                                              color: AppColors.textInverse,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -333,11 +318,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           // Alert Preferences
                           Padding(
                             padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                            child: PremiumLock(
-                              locked: !isPremium,
-                              featureName:
-                                  'Notification preferences & geo-alert thresholds',
-                              child: Column(
+                            child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
@@ -557,7 +538,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 ],
                               ),
-                            ),
                           ),
                           // Health Calibration
                           Padding(

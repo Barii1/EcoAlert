@@ -179,18 +179,6 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
                         ),
                       ),
                     ),
-                    if (!isPremium)
-                      TextButton(
-                        onPressed: () => showUpgradePromptDialog(context),
-                        child: Text(
-                          'Upgrade',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
