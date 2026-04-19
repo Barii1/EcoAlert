@@ -1,6 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 enum FloodRiskLevel { low, moderate, high, critical }
+
+DateTime? _floodDateTimeFromJson(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  if (value is Timestamp) return value.toDate();
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
 
 class RainfallData {
   final double mm24h;       // Rainfall in last 24 hours (mm)
@@ -14,9 +23,7 @@ class RainfallData {
       mm24h: (json['mm24h'] as num).toDouble(),
       mmPerHour: (json['mmPerHour'] as num).toDouble(),
       mm48h: (json['mm48h'] as num).toDouble(),
-      timestamp: json['timestamp'] is DateTime
-          ? json['timestamp']
-          : DateTime.parse(json['timestamp'] as String),
+      timestamp: _floodDateTimeFromJson(json['timestamp']) ?? DateTime.now(),
     );
   }
 
@@ -58,9 +65,8 @@ class FloodRisk {
       city: json['city'] as String,
       affectedAreas: List<String>.from(json['affectedAreas'] ?? []),
       explanation: json['explanation'] as String? ?? '',
-      calculatedAt: json['calculatedAt'] is DateTime
-          ? json['calculatedAt']
-          : DateTime.parse(json['calculatedAt'] as String),
+      calculatedAt:
+          _floodDateTimeFromJson(json['calculatedAt']) ?? DateTime.now(),
     );
   }
 

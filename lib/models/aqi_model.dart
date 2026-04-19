@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 enum AqiCategory {
@@ -34,17 +35,16 @@ class AqiReading {
 
   factory AqiReading.fromJson(Map<String, dynamic> json) {
     final aqiVal = (json['aqi'] as num).toInt();
+    final rawCategory = json['category'];
     return AqiReading(
       aqi: aqiVal,
-      category: categoryFromIndex(aqiVal),
+      category: _aqiCategoryFromJson(rawCategory, aqiVal),
       pm25: (json['pm25'] as num?)?.toDouble() ?? 0,
       pm10: (json['pm10'] as num?)?.toDouble() ?? 0,
       o3: (json['o3'] as num?)?.toDouble() ?? 0,
       no2: (json['no2'] as num?)?.toDouble() ?? 0,
       co: (json['co'] as num?)?.toDouble() ?? 0,
-      timestamp: json['timestamp'] is DateTime
-          ? json['timestamp']
-          : DateTime.parse(json['timestamp'] as String),
+      timestamp: _dateTimeFromJson(json['timestamp']) ?? DateTime.now(),
       city: json['city'] as String,
     );
   }
@@ -102,6 +102,23 @@ class AqiReading {
     if (aqi <= 300) return AqiCategory.veryUnhealthy;
     return AqiCategory.hazardous;
   }
+
+  static AqiCategory _aqiCategoryFromJson(dynamic raw, int aqiVal) {
+    if (raw is String) {
+      for (final c in AqiCategory.values) {
+        if (c.name == raw) return c;
+      }
+    }
+    return categoryFromIndex(aqiVal);
+  }
+
+  static DateTime? _dateTimeFromJson(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 }
 
 class HourlyAqiPoint {
@@ -111,9 +128,7 @@ class HourlyAqiPoint {
 
   factory HourlyAqiPoint.fromJson(Map<String, dynamic> json) {
     return HourlyAqiPoint(
-      hour: json['hour'] is DateTime
-          ? json['hour']
-          : DateTime.parse(json['hour'] as String),
+      hour: AqiReading._dateTimeFromJson(json['hour']) ?? DateTime.now(),
       aqi: (json['aqi'] as num).toInt(),
     );
   }

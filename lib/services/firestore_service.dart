@@ -1,15 +1,148 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../config/firestore_paths.dart';
-import '../models/user_model.dart';
-import '../models/hazard_report_model.dart';
-import '../models/alert_model.dart';
 
-/// Centralized Firestore operations for the app.
-/// Handles CRUD for users, reports, and alerts.
+import '../config/firestore_paths.dart';
+import '../models/alert_model.dart';
+import '../models/hazard_report_model.dart';
+import '../models/user_model.dart';
+
+/// Firestore access: generic helpers (Phases 4–5) plus existing typed CRUD.
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // ── Collections ──
+  // ─── Single Document ─────────────────────────────────────────
+
+  Future<Map<String, dynamic>?> getDoc(String path) async {
+    final doc = await _db.doc(path).get();
+    if (!doc.exists) return null;
+    return {'id': doc.id, ...?doc.data()};
+  }
+
+  Future<String> addDoc(
+    String collection,
+    Map<String, dynamic> data,
+  ) async {
+    final ref = await _db.collection(collection).add({
+      ...data,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return ref.id;
+  }
+
+  Future<void> setDoc(
+    String path,
+    Map<String, dynamic> data, {
+    bool merge = false,
+  }) async {
+    await _db.doc(path).set(data, SetOptions(merge: merge));
+  }
+
+  Future<void> updateDoc(
+    String path,
+    Map<String, dynamic> data,
+  ) async {
+    await _db.doc(path).update(data);
+  }
+
+  Future<void> deleteDoc(String path) async {
+    await _db.doc(path).delete();
+  }
+
+  // ─── Collections ─────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getCollection(
+    String collection, {
+    String? orderBy,
+    bool descending = false,
+    int? limit,
+    List<List<dynamic>>? where,
+  }) async {
+    Query<Map<String, dynamic>> query = _db.collection(collection);
+
+    if (where != null) {
+      for (final condition in where) {
+        if (condition.length >= 2) {
+          query = query.where(
+            condition[0] as String,
+            isEqualTo: condition[1],
+          );
+        }
+      }
+    }
+
+    if (orderBy != null) {
+      query = query.orderBy(orderBy, descending: descending);
+    }
+
+    if (limit != null) {
+      query = query.limit(limit);
+    }
+
+    final snapshot = await query.get();
+    return snapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList();
+  }
+
+  Stream<List<Map<String, dynamic>>> streamCollection(
+    String collection, {
+    String? orderBy,
+    bool descending = false,
+    int? limit,
+    String? whereField,
+    dynamic whereValue,
+  }) {
+    Query<Map<String, dynamic>> query = _db.collection(collection);
+
+    if (whereField != null) {
+      query = query.where(whereField, isEqualTo: whereValue);
+    }
+
+    if (orderBy != null) {
+      query = query.orderBy(orderBy, descending: descending);
+    }
+
+    if (limit != null) {
+      query = query.limit(limit);
+    }
+
+    return query.snapshots().map(
+          (snapshot) => snapshot.docs
+              .map((doc) => {'id': doc.id, ...doc.data()})
+              .toList(),
+        );
+  }
+
+  Stream<Map<String, dynamic>?> streamDoc(String path) {
+    return _db.doc(path).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return {'id': doc.id, ...?doc.data()};
+    });
+  }
+
+  // ─── Batch ───────────────────────────────────────────────────
+
+  Future<void> batchWrite(
+    List<Map<String, dynamic>> operations,
+  ) async {
+    final batch = _db.batch();
+    for (final op in operations) {
+      final type = op['type'] as String;
+      final ref = _db.doc(op['path'] as String);
+      if (type == 'set') {
+        batch.set(ref, op['data'] as Map<String, dynamic>);
+      } else if (type == 'update') {
+        batch.update(ref, op['data'] as Map<String, dynamic>);
+      } else if (type == 'delete') {
+        batch.delete(ref);
+      }
+    }
+    await batch.commit();
+  }
+
+  // ══════════════════════════════════════════════
+  //  Typed helpers (used by providers — unchanged API)
+  // ══════════════════════════════════════════════
+
   CollectionReference<Map<String, dynamic>> get _users =>
       _db.collection(FirestorePaths.users);
   CollectionReference<Map<String, dynamic>> get _reports =>
@@ -17,34 +150,25 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> get _alerts =>
       _db.collection(FirestorePaths.alerts);
 
-  // ══════════════════════════════════════════════
-  //  USER OPERATIONS
-  // ══════════════════════════════════════════════
-
-  /// Create or overwrite a user profile document.
   Future<void> setUser(UserModel user) async {
     await _users.doc(user.id).set(user.toJson());
   }
 
-  /// Get a user profile by UID.
   Future<UserModel?> getUser(String uid) async {
     final doc = await _users.doc(uid).get();
     if (!doc.exists || doc.data() == null) return null;
     return UserModel.fromJson({...doc.data()!, 'id': uid});
   }
 
-  /// Update specific fields on a user profile.
   Future<void> updateUser(String uid, Map<String, dynamic> fields) async {
     await _users.doc(uid).update(fields);
   }
 
-  /// Update user role (admin operation).
   Future<void> setUserRole(String uid, UserRole role) async {
     final roleStr = role.toString().split('.').last;
     await _users.doc(uid).update({'role': roleStr});
   }
 
-  /// Get all users (admin).
   Future<List<UserModel>> getAllUsers() async {
     final snapshot = await _users.orderBy('createdAt', descending: true).get();
     return snapshot.docs.map((doc) {
@@ -52,25 +176,18 @@ class FirestoreService {
     }).toList();
   }
 
-  // ══════════════════════════════════════════════
-  //  HAZARD REPORT OPERATIONS
-  // ══════════════════════════════════════════════
-
-  /// Submit a new hazard report. Returns the document ID.
   Future<String> addReport(HazardReportModel report) async {
     final data = report.toJson();
-    data.remove('id'); // let Firestore generate the ID
+    data.remove('id');
     data['createdAt'] = FieldValue.serverTimestamp();
     final doc = await _reports.add(data);
     return doc.id;
   }
 
-  /// Update a report document (e.g. to add imageUrls after upload).
   Future<void> updateReport(String reportId, Map<String, dynamic> fields) async {
     await _reports.doc(reportId).update(fields);
   }
 
-  /// Get all reports (admin). Returns newest first.
   Future<List<HazardReportModel>> getAllReports() async {
     final snapshot = await _reports.orderBy('createdAt', descending: true).get();
     return snapshot.docs.map((doc) {
@@ -78,7 +195,6 @@ class FirestoreService {
     }).toList();
   }
 
-  /// Get reports by status (admin filtering).
   Future<List<HazardReportModel>> getReportsByStatus(String status) async {
     final snapshot = await _reports
         .where('status', isEqualTo: status)
@@ -89,7 +205,6 @@ class FirestoreService {
     }).toList();
   }
 
-  /// Get reports submitted by a specific user.
   Future<List<HazardReportModel>> getUserReports(String userId) async {
     final snapshot = await _reports
         .where('reporterUid', isEqualTo: userId)
@@ -100,7 +215,6 @@ class FirestoreService {
     }).toList();
   }
 
-  /// Update report status (admin approve/reject/resolve).
   Future<void> updateReportStatus(String reportId, String status) async {
     await _reports.doc(reportId).update({
       'status': status,
@@ -108,22 +222,21 @@ class FirestoreService {
     });
   }
 
-  /// Real-time stream of all reports, newest first.
   Stream<List<HazardReportModel>> reportsStream({int limit = 50}) {
     return _reports
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
-              return HazardReportModel.fromJson({...doc.data(), 'id': doc.id});
-            }).toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) =>
+                    HazardReportModel.fromJson({...doc.data(), 'id': doc.id}),
+              )
+              .toList(),
+        );
   }
 
-  // ══════════════════════════════════════════════
-  //  ALERT OPERATIONS
-  // ══════════════════════════════════════════════
-
-  /// Get active alerts, newest first.
   Future<List<AlertModel>> getAlerts({int limit = 20}) async {
     final snapshot = await _alerts
         .orderBy('timestamp', descending: true)
@@ -134,7 +247,6 @@ class FirestoreService {
     }).toList();
   }
 
-  /// Get alerts for a specific location/city.
   Future<List<AlertModel>> getAlertsForCity(String city, {int limit = 10}) async {
     final snapshot = await _alerts
         .where('location', isGreaterThanOrEqualTo: city)
@@ -147,7 +259,6 @@ class FirestoreService {
     }).toList();
   }
 
-  /// Add a new alert (admin broadcast).
   Future<String> addAlert(AlertModel alert) async {
     final data = alert.toJson();
     data.remove('id');
@@ -155,27 +266,24 @@ class FirestoreService {
     return doc.id;
   }
 
-  /// Delete an alert.
   Future<void> deleteAlert(String alertId) async {
     await _alerts.doc(alertId).delete();
   }
 
-  /// Stream of alerts for real-time updates.
   Stream<List<AlertModel>> alertsStream({int limit = 20}) {
     return _alerts
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
-              return AlertModel.fromJson({...doc.data(), 'id': doc.id});
-            }).toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => AlertModel.fromJson({...doc.data(), 'id': doc.id}),
+              )
+              .toList(),
+        );
   }
 
-  // ══════════════════════════════════════════════
-  //  AQI & WEATHER (written by Cloud Functions)
-  // ══════════════════════════════════════════════
-
-  /// Read the latest AQI reading for a city (written by Cloud Functions).
   Future<Map<String, dynamic>?> getAqiReading(String city) async {
     final doc = await _db
         .collection(FirestorePaths.aqiReadings)
@@ -184,7 +292,6 @@ class FirestoreService {
     return doc.exists ? doc.data() : null;
   }
 
-  /// Read the latest weather data for a city (written by Cloud Functions).
   Future<Map<String, dynamic>?> getWeatherData(String city) async {
     final doc = await _db
         .collection(FirestorePaths.weatherData)
@@ -193,7 +300,6 @@ class FirestoreService {
     return doc.exists ? doc.data() : null;
   }
 
-  /// Stream AQI data for a city (real-time updates from Cloud Functions).
   Stream<Map<String, dynamic>?> aqiStream(String city) {
     return _db
         .collection(FirestorePaths.aqiReadings)
@@ -202,11 +308,6 @@ class FirestoreService {
         .map((doc) => doc.exists ? doc.data() : null);
   }
 
-  // ══════════════════════════════════════════════
-  //  FCM TOKEN & ALERT SETTINGS
-  // ══════════════════════════════════════════════
-
-  /// Save a user's FCM token.
   Future<void> saveFcmToken(String uid, String token) async {
     await _db.collection(FirestorePaths.fcmTokens).doc(uid).set({
       'token': token,
@@ -214,12 +315,10 @@ class FirestoreService {
     });
   }
 
-  /// Remove a user's FCM token (on logout).
   Future<void> removeFcmToken(String uid) async {
     await _db.collection(FirestorePaths.fcmTokens).doc(uid).delete();
   }
 
-  /// Save alert notification preferences for a user.
   Future<void> saveAlertSettings(String uid, Map<String, dynamic> settings) async {
     await _db
         .collection(FirestorePaths.alertSettings)
@@ -227,7 +326,6 @@ class FirestoreService {
         .set(settings, SetOptions(merge: true));
   }
 
-  /// Get alert notification preferences for a user.
   Future<Map<String, dynamic>?> getAlertSettings(String uid) async {
     final doc = await _db
         .collection(FirestorePaths.alertSettings)

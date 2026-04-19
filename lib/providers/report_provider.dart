@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../config/firestore_paths.dart';
 import '../models/hazard_report_model.dart';
 import '../services/firestore_service.dart';
+import '../services/upload_service.dart';
 
 class ReportProvider extends ChangeNotifier {
   ReportProvider({
@@ -12,7 +15,8 @@ class ReportProvider extends ChangeNotifier {
   }) : _firestoreService = firestoreService;
 
   final FirestoreService? _firestoreService;
-  StreamSubscription? _reportsSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _reportsSubscription;
+  bool _isUsingFirebase = false;
 
   List<HazardReportModel> _reports = [];
   bool _isLoading = false;
@@ -27,16 +31,56 @@ class ReportProvider extends ChangeNotifier {
 
   int get pendingCount => pendingReports.length;
 
-  /// Initialize: subscribe to Firestore real-time stream.
+  /// Local demo baseline (no Firestore subscription).
   Future<void> init() async {
+    if (_isUsingFirebase) return;
+    _reports = [];
+    _isLoading = false;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Call after Firebase login to stream real reports.
+  void initFirestore({required bool isAdmin, String? uid}) {
     if (_firestoreService == null) return;
 
+    _isUsingFirebase = true;
+    _reportsSubscription?.cancel();
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
-    _reportsSub = _firestoreService!.reportsStream().listen(
-      (reports) {
-        _reports = reports;
+    if (!isAdmin && (uid == null || uid.isEmpty)) {
+      _reports = [];
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    final Stream<List<Map<String, dynamic>>> stream = isAdmin
+        ? _firestoreService!.streamCollection(
+            FirestorePaths.reports,
+            orderBy: 'createdAt',
+            descending: true,
+            limit: 100,
+          )
+        : _firestoreService!.streamCollection(
+            FirestorePaths.reports,
+            whereField: 'reporterUid',
+            whereValue: uid,
+          );
+
+    _reportsSubscription = stream.listen(
+      (data) {
+        var models =
+            data.map((row) => HazardReportModel.fromJson(row)).toList();
+        if (!isAdmin) {
+          models.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          if (models.length > 100) {
+            models = models.sublist(0, 100);
+          }
+        }
+        _reports = models;
         _isLoading = false;
         _errorMessage = null;
         notifyListeners();
@@ -47,6 +91,16 @@ class ReportProvider extends ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  /// Stop Firestore and revert to empty demo list.
+  void disposeFirestore() {
+    _reportsSubscription?.cancel();
+    _reportsSubscription = null;
+    _isUsingFirebase = false;
+    _reports = [];
+    _isLoading = false;
+    notifyListeners();
   }
 
   /// Submit a new hazard report.
@@ -62,6 +116,13 @@ class ReportProvider extends ChangeNotifier {
     String? mainPollutant,
     double? confidence,
   }) async {
+    final fbUid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = (fbUid != null && fbUid.isNotEmpty) ? fbUid : reporterUid;
+    final fbName = FirebaseAuth.instance.currentUser?.displayName;
+    final name = reporterName.isNotEmpty
+        ? reporterName
+        : (fbName != null && fbName.isNotEmpty ? fbName : 'User');
+
     final report = HazardReportModel(
       id: 'r-${DateTime.now().millisecondsSinceEpoch}',
       hazardType: hazardType,
@@ -73,27 +134,57 @@ class ReportProvider extends ChangeNotifier {
       aqi: aqi ?? 0,
       mainPollutant: mainPollutant ?? '',
       confidence: confidence ?? 0,
-      reporterUid: reporterUid,
-      reporterName: reporterName,
+      reporterUid: uid,
+      reporterName: name,
+      imageUrls: const [],
     );
 
-    if (_firestoreService == null) return;
+    if (_isUsingFirebase) {
+      if (_firestoreService == null) return;
+      try {
+        _isLoading = true;
+        notifyListeners();
 
-    try {
-      _isLoading = true;
-      notifyListeners();
+        final data = report.toJson()
+          ..remove('id')
+          ..remove('createdAt');
+        final newDocId =
+            await _firestoreService!.addDoc(FirestorePaths.reports, data);
 
-      await _firestoreService!.addReport(report);
+        // Upload images if any were provided
+        if (images != null && images.isNotEmpty) {
+          final urls = await UploadService.uploadReportImages(
+            reportId: newDocId,
+            images: images,
+          );
+          if (urls.isNotEmpty) {
+            await _firestoreService!.updateDoc(
+              FirestorePaths.reportDoc(newDocId),
+              {
+                'imageUrls': urls,
+                'imageCount': urls.length,
+              },
+            );
+          }
+        }
 
-      // Image uploads are handled by backend/Supabase integration (not Firebase Storage).
-
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _errorMessage = 'Failed to submit report: $e';
-      _isLoading = false;
-      notifyListeners();
+        _isLoading = false;
+        notifyListeners();
+      } catch (e) {
+        _errorMessage = 'Failed to submit report: $e';
+        _isLoading = false;
+        notifyListeners();
+      }
+      return;
     }
+
+    // Demo mode — persist in memory only (no Firestore).
+    _isLoading = true;
+    notifyListeners();
+    _reports = [..._reports, report];
+    _isLoading = false;
+    _errorMessage = null;
+    notifyListeners();
   }
 
   Future<void> approve(String reportId) async {
@@ -109,18 +200,34 @@ class ReportProvider extends ChangeNotifier {
   }
 
   Future<void> _setStatus(String reportId, ReportStatus status) async {
-    if (_firestoreService == null) return;
-    try {
-      await _firestoreService!.updateReportStatus(reportId, status.name);
-    } catch (e) {
-      _errorMessage = 'Failed to update report: $e';
-      notifyListeners();
+    if (_isUsingFirebase) {
+      if (_firestoreService == null) return;
+      try {
+        await _firestoreService!.updateDoc(
+          FirestorePaths.reportDoc(reportId),
+          {'status': status.name},
+        );
+      } catch (e) {
+        _errorMessage = 'Failed to update report: $e';
+        notifyListeners();
+      }
+      return;
     }
+
+    // Demo mode — update local list only.
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx == -1) return;
+    _reports = [
+      ..._reports.sublist(0, idx),
+      _reports[idx].copyWith(status: status),
+      ..._reports.sublist(idx + 1),
+    ];
+    notifyListeners();
   }
 
   @override
   void dispose() {
-    _reportsSub?.cancel();
+    _reportsSubscription?.cancel();
     super.dispose();
   }
 }

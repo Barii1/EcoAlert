@@ -15,6 +15,13 @@ class AuthProvider extends ChangeNotifier {
   Map<String, dynamic>? get firestoreProfile => _firestoreProfile;
   final bool _useFirebase;
 
+  /// Optional callback invoked after successful Firebase login or sign-up.
+  /// Used by main.dart to start Firestore streams (avoids circular imports).
+  void Function()? onFirebaseLoginSuccess;
+
+  /// Optional callback after Firebase sign-out or switching to demo mode.
+  void Function()? onFirebaseLogoutSuccess;
+
   UserModel? _currentUser;
   bool _isAuthenticated = false;
   bool _isLoading = false;
@@ -67,19 +74,33 @@ class AuthProvider extends ChangeNotifier {
     );
   }
 
-  /// Call this on app startup. Restores Firebase session if user was
-  /// previously logged in. Does nothing if no session exists.
+  /// Clears all in-app auth state (demo or Firebase-backed). Does not call
+  /// [FirebaseAuth.signOut]; use when Firebase already has no user.
+  void _clearLocalAuthState() {
+    _isFirebaseUser = false;
+    _firestoreProfile = null;
+    _currentUser = null;
+    _isAuthenticated = false;
+    _hasShownUpgradePrompt = false;
+  }
+
+  /// Call this on app startup. Restores session **only** when
+  /// [FirebaseAuth.instance.currentUser] is non-null; otherwise clears any
+  /// stale in-memory session (e.g. demo) so it cannot survive without a token.
   Future<void> initAuth() async {
     if (_firebaseAuthService == null) return;
-    final User? firebaseUser = _firebaseAuthService!.getCurrentUser();
-    if (firebaseUser != null) {
-      _isFirebaseUser = true;
-      _firestoreProfile = await _firebaseAuthService!
-          .getUserProfile(firebaseUser.uid);
-      _currentUser = _profileToUserModel(firebaseUser.uid, _firestoreProfile);
-      _isAuthenticated = true;
+    final User? firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      _clearLocalAuthState();
       notifyListeners();
+      return;
     }
+    _isFirebaseUser = true;
+    _firestoreProfile =
+        await _firebaseAuthService!.getUserProfile(firebaseUser.uid);
+    _currentUser = _profileToUserModel(firebaseUser.uid, _firestoreProfile);
+    _isAuthenticated = true;
+    notifyListeners();
   }
 
   /// Real Firebase login. Throws on failure so UI can show error.
@@ -101,6 +122,7 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
       _isAuthenticated = true;
       notifyListeners();
+      onFirebaseLoginSuccess?.call();
     }
   }
 
@@ -136,24 +158,32 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
       _isAuthenticated = true;
       notifyListeners();
+      onFirebaseLoginSuccess?.call();
     }
   }
 
-  /// Signs out Firebase user. Does not affect demo sessions.
+  /// Signs out Firebase and clears all local auth state (including demo).
   Future<void> firebaseLogout() async {
     if (_firebaseAuthService == null) return;
     await _firebaseAuthService!.signOut();
-    _isFirebaseUser = false;
-    _firestoreProfile = null;
-    _currentUser = null;
-    _isAuthenticated = false;
+    _clearLocalAuthState();
     notifyListeners();
+    onFirebaseLogoutSuccess?.call();
   }
 
-  /// Try to restore a previously signed-in session (Firebase only).
+  /// Restores session only when [FirebaseAuth.instance.currentUser] exists.
   Future<void> tryAutoLogin() async {
     if (!_useFirebase) return;
     await initAuth();
+  }
+
+  /// Ends any Firebase session before entering demo mode so a real token
+  /// cannot coexist with demo-only [UserModel] state.
+  Future<void> _signOutFirebaseForDemoSwitch() async {
+    if (_firebaseAuthService == null) return;
+    try {
+      await _firebaseAuthService!.signOut();
+    } catch (_) {}
   }
 
   // ══════════════════════════════════════════════
@@ -276,7 +306,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void demoLogin() {
+  Future<void> demoLogin() async {
+    await _signOutFirebaseForDemoSwitch();
+    onFirebaseLogoutSuccess?.call();
+    _isFirebaseUser = false;
+    _firestoreProfile = null;
     _currentUser = UserModel(
       id: 'dev',
       username: 'Developer',
@@ -295,9 +329,13 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void demoBasicLogin() => demoLogin();
+  Future<void> demoBasicLogin() => demoLogin();
 
-  void demoGuestLogin() {
+  Future<void> demoGuestLogin() async {
+    await _signOutFirebaseForDemoSwitch();
+    onFirebaseLogoutSuccess?.call();
+    _isFirebaseUser = false;
+    _firestoreProfile = null;
     _currentUser = UserModel(
       id: 'guest',
       username: 'Guest',
@@ -316,7 +354,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void demoAdminLogin() {
+  Future<void> demoAdminLogin() async {
+    await _signOutFirebaseForDemoSwitch();
+    onFirebaseLogoutSuccess?.call();
+    _isFirebaseUser = false;
+    _firestoreProfile = null;
     _currentUser = UserModel(
       id: 'admin',
       username: 'Admin',
@@ -335,7 +377,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void demoPremiumLogin() {
+  Future<void> demoPremiumLogin() async {
+    await _signOutFirebaseForDemoSwitch();
+    onFirebaseLogoutSuccess?.call();
+    _isFirebaseUser = false;
+    _firestoreProfile = null;
     _currentUser = UserModel(
       id: 'premium',
       username: 'Premium User',

@@ -71,10 +71,41 @@ void main() async {
   final authProvider = AuthProvider(useFirebase: firebaseReady);
   await authProvider.initAuth();
 
+  final alertProvider = AlertProvider(firestoreService: firestoreService);
+  final reportProvider = ReportProvider(firestoreService: firestoreService);
+
+  authProvider.onFirebaseLoginSuccess = () {
+    alertProvider.initFirestore();
+    reportProvider.initFirestore(
+      isAdmin: authProvider.isAdmin,
+      uid: authProvider.currentUser?.id,
+    );
+  };
+  authProvider.onFirebaseLogoutSuccess = () {
+    alertProvider.disposeFirestore();
+    reportProvider.disposeFirestore();
+  };
+
+  if (authProvider.isFirebaseUser) {
+    alertProvider.initFirestore();
+    reportProvider.initFirestore(
+      isAdmin: authProvider.isAdmin,
+      uid: authProvider.currentUser?.id,
+    );
+  } else {
+    await alertProvider.init();
+    await reportProvider.init();
+  }
+
   // Initialize push notifications if Firebase is ready.
   if (firebaseReady) {
-    await NotificationService.instance.init();
-    debugPrint('[EcoAlert] Notification service initialized');
+    try {
+      await NotificationService.instance.init();
+      debugPrint('[EcoAlert] Notification service initialized');
+    } catch (e) {
+      // FCM unavailable — app continues without notifications
+      debugPrint('FCM init failed: $e');
+    }
   }
 
   runApp(EcoAlertApp(
@@ -82,6 +113,8 @@ void main() async {
     authProvider: authProvider,
     useFirebase: firebaseReady,
     firestoreService: firestoreService,
+    alertProvider: alertProvider,
+    reportProvider: reportProvider,
   ));
 }
 
@@ -92,12 +125,16 @@ class EcoAlertApp extends StatelessWidget {
     required this.authProvider,
     this.useFirebase = false,
     this.firestoreService,
+    required this.alertProvider,
+    required this.reportProvider,
   });
 
   final ThemeProvider themeProvider;
   final AuthProvider authProvider;
   final bool useFirebase;
   final FirestoreService? firestoreService;
+  final AlertProvider alertProvider;
+  final ReportProvider reportProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -106,19 +143,13 @@ class EcoAlertApp extends StatelessWidget {
         ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
-        ChangeNotifierProvider(
-          create: (_) => AlertProvider(firestoreService: firestoreService)..init(),
-        ),
+        ChangeNotifierProvider<AlertProvider>.value(value: alertProvider),
         ChangeNotifierProvider(create: (_) => AqiProvider()..loadForCity('Lahore')),
         ChangeNotifierProvider(create: (_) => FloodProvider()..loadForCity('Lahore')),
         ChangeNotifierProvider(create: (_) => WeatherProvider()..loadForCity('Lahore')),
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (_) => DangerThemeProvider()),
-        ChangeNotifierProvider(
-          create: (_) => ReportProvider(
-            firestoreService: firestoreService,
-          )..init(),
-        ),
+        ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {

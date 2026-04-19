@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../config/app_config.dart';
 import '../models/flood_model.dart';
 import '../services/demo_weather_source.dart';
 import '../services/openweather_weather_source.dart';
@@ -18,6 +21,11 @@ class FloodProvider extends ChangeNotifier {
   bool _hasError = false;
   String? _errorMessage;
   String _city = 'Lahore';
+  Timer? _refreshTimer;
+
+  FloodProvider() {
+    _startRefreshTimer();
+  }
 
   FloodRisk? get risk => _risk;
   bool get isLoading => _isLoading;
@@ -44,4 +52,18 @@ class FloodProvider extends ChangeNotifier {
   }
 
   Future<void> retry() => loadForCity(_city);
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      Duration(minutes: AppConfig.refreshIntervalMinutes),
+      (_) => loadForCity(_city),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 }

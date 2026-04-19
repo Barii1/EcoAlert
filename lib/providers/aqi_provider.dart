@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../config/app_config.dart';
 import '../models/aqi_model.dart';
 import '../services/aqi_data_source.dart';
 import '../services/demo_aqi_source.dart';
@@ -18,6 +21,11 @@ class AqiProvider extends ChangeNotifier {
   bool _hasError = false;
   String? _errorMessage;
   String _city = 'Lahore';
+  Timer? _refreshTimer;
+
+  AqiProvider() {
+    _startRefreshTimer();
+  }
 
   AqiReading? get current => _current;
   List<HourlyAqiPoint> get hourly => _hourly;
@@ -45,4 +53,18 @@ class AqiProvider extends ChangeNotifier {
   }
 
   Future<void> retry() => loadForCity(_city);
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      Duration(minutes: AppConfig.refreshIntervalMinutes),
+      (_) => loadForCity(_city),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,9 +78,18 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    // Try to restore Firebase session (auto-login returning users)
+    // Restore only a real Firebase session — never trust in-memory/demo flags alone.
     await authProvider.tryAutoLogin();
     if (!mounted) return;
+
+    if (authProvider.isUsingFirebase) {
+      if (FirebaseAuth.instance.currentUser == null) {
+        await authProvider.firebaseLogout();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacementNamed('/login');
+        return;
+      }
+    }
 
     if (authProvider.isAuthenticated) {
       if (authProvider.isAdmin) {

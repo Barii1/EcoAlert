@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../models/aqi_model.dart';
-import '../config/api_keys.dart';
+import '../config/app_config.dart';
 import '../config/city_mappings.dart';
 import 'aqi_data_source.dart';
 
@@ -16,18 +16,22 @@ class WaqiAqiSource implements AqiDataSource {
   @override
   Future<AqiReading> fetchCurrent(String city) async {
     final station = CityMappings.getWaqiStation(city);
-    final url = 'https://api.waqi.info/feed/$station/?token=${ApiKeys.waqi}';
+    final url =
+        'https://api.waqi.info/feed/$station/?token=${AppConfig.waqiToken}';
 
     final response = await _dio.get(url);
-    final data = response.data;
+    final data = response.data as Map<String, dynamic>? ?? {};
 
     if (data['status'] != 'ok') {
       throw Exception('WAQI API error: ${data['data'] ?? 'Unknown error'}');
     }
 
-    final feed = data['data'];
-    final aqiVal = (feed['aqi'] as num).toInt();
+    final feed = data['data'] as Map<String, dynamic>? ?? {};
+    final aqiVal = (feed['aqi'] as num?)?.toInt() ?? 0;
     final iaqi = feed['iaqi'] as Map<String, dynamic>? ?? {};
+    final cityName = (feed['city'] is Map<String, dynamic>)
+        ? (feed['city']['name'] as String? ?? city)
+        : city;
 
     return AqiReading(
       aqi: aqiVal,
@@ -38,7 +42,7 @@ class WaqiAqiSource implements AqiDataSource {
       no2: _extractPollutant(iaqi, 'no2'),
       co: _extractPollutant(iaqi, 'co'),
       timestamp: DateTime.now(),
-      city: city,
+      city: cityName,
     );
   }
 

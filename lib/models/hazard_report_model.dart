@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 enum ReportStatus { pending, approved, rejected, resolved }
@@ -103,12 +104,8 @@ class HazardReportModel {
   static DateTime _parseDateTime(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
     if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
-    // Firestore Timestamp has a toDate() method
-    try {
-      return (value as dynamic).toDate() as DateTime;
-    } catch (_) {
-      return DateTime.now();
-    }
+    return DateTime.now();
   }
 }

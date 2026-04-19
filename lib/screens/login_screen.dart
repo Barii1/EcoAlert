@@ -376,8 +376,9 @@ class _LoginScreenState extends State<LoginScreen>
                   child: OutlinedButton(
                     onPressed: authProvider.isLoading
                         ? null
-                        : () {
-                            authProvider.demoBasicLogin();
+                        : () async {
+                            await authProvider.demoBasicLogin();
+                            if (!context.mounted) return;
                             Navigator.pushReplacementNamed(
                                 context, '/navigation');
                           },
@@ -404,8 +405,9 @@ class _LoginScreenState extends State<LoginScreen>
                   child: OutlinedButton(
                     onPressed: authProvider.isLoading
                         ? null
-                        : () {
-                            authProvider.demoPremiumLogin();
+                        : () async {
+                            await authProvider.demoPremiumLogin();
+                            if (!context.mounted) return;
                             Navigator.pushReplacementNamed(
                                 context, '/navigation');
                           },
@@ -432,8 +434,9 @@ class _LoginScreenState extends State<LoginScreen>
                   child: OutlinedButton(
                     onPressed: authProvider.isLoading
                         ? null
-                        : () {
-                            authProvider.demoAdminLogin();
+                        : () async {
+                            await authProvider.demoAdminLogin();
+                            if (!context.mounted) return;
                             Navigator.pushReplacementNamed(context, '/admin');
                           },
                     style: OutlinedButton.styleFrom(

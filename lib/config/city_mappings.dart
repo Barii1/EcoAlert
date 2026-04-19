@@ -1,30 +1,22 @@
-/// Maps Pakistani city display names to API-specific identifiers.
 class CityMappings {
-  CityMappings._();
-
-  /// WAQI station feed names.
-  /// Find station IDs at: https://aqicn.org/city/pakistan/
-  static const Map<String, String> waqiStations = {
-    'Lahore': 'lahore',
-    'Islamabad': 'islamabad',
-    'Karachi': 'karachi',
-    'Faisalabad': 'faisalabad',
-    'Peshawar': 'peshawar',
-    'Multan': 'multan',
-    'Rawalpindi': 'rawalpindi',
-    'Quetta': 'quetta',
+  static const Map<String, String> waqiStationIds = {
+    'lahore': 'lahore',
+    'islamabad': 'islamabad',
+    'karachi': 'karachi',
+    'faisalabad': 'faisalabad',
+    'peshawar': 'peshawar',
+    'multan': 'multan',
+    'rawalpindi': 'rawalpindi',
   };
 
-  /// OpenWeatherMap city query strings (city,country code).
-  static const Map<String, String> owmCities = {
-    'Lahore': 'Lahore,PK',
-    'Islamabad': 'Islamabad,PK',
-    'Karachi': 'Karachi,PK',
-    'Faisalabad': 'Faisalabad,PK',
-    'Peshawar': 'Peshawar,PK',
-    'Multan': 'Multan,PK',
-    'Rawalpindi': 'Rawalpindi,PK',
-    'Quetta': 'Quetta,PK',
+  static const Map<String, String> owmCityNames = {
+    'lahore': 'Lahore,PK',
+    'islamabad': 'Islamabad,PK',
+    'karachi': 'Karachi,PK',
+    'faisalabad': 'Faisalabad,PK',
+    'peshawar': 'Peshawar,PK',
+    'multan': 'Multan,PK',
+    'rawalpindi': 'Rawalpindi,PK',
   };
 
   /// Lat/lon for cities (used for forecast API).
@@ -39,14 +31,11 @@ class CityMappings {
     'Quetta': [30.1798, 66.9750],
   };
 
-  /// Get WAQI feed name for a city. Falls back to lowercase city name.
   static String getWaqiStation(String city) =>
-      waqiStations[city] ?? city.toLowerCase();
+      waqiStationIds[city.toLowerCase()] ?? 'lahore';
 
-  /// Get OWM city query for a city.
   static String getOwmCity(String city) =>
-      owmCities[city] ?? '$city,PK';
+      owmCityNames[city.toLowerCase()] ?? 'Lahore,PK';
 
-  /// List of all supported cities.
-  static List<String> get allCities => waqiStations.keys.toList();
+  static List<String> get allCities => owmCityNames.keys.toList();
 }
