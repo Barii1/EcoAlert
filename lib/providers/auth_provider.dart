@@ -137,6 +137,7 @@ class AuthProvider extends ChangeNotifier {
       _hasShownUpgradePrompt =
           _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
       _errorMessage = null;
+      onFirebaseLoginSuccess?.call();
     } on FirebaseAuthException catch (e) {
       _isAuthenticated = false;
       _errorMessage = e.message ?? 'Login failed. Please try again.';
@@ -148,7 +149,6 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-      onFirebaseLoginSuccess?.call();
     }
   }
 

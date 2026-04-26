@@ -282,11 +282,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     final dangerTheme = context.watch<DangerThemeProvider>();
 
-    // Update danger theme from AQI data whenever it changes.
     final aqiProvider = context.watch<AqiProvider>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      dangerTheme.updateFromAqi(aqiProvider.current);
-    });
+    dangerTheme.updateFromAqi(aqiProvider.current);
 
     final screens = <Widget>[
       const HomeScreen(),

@@ -6,7 +6,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_colors.dart';
-import '../config/city_mappings.dart';
 import '../providers/aqi_provider.dart';
 import '../providers/flood_provider.dart';
 
@@ -52,6 +51,13 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
 
     return Stack(
       children: [
+        if (points.isEmpty)
+          const Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: _NoHeatmapDataBanner(),
+          ),
         CircleLayer(
           circles: points
               .map(
@@ -132,16 +138,14 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
 
   List<_HeatmapPoint> _buildPoints(
       HeatmapMode mode, AqiProvider aqi, FloodProvider flood) {
-    // TODO(Bari): Expose a multi-city collection from providers (for example
-    // `cityReadings` / `cityRisks`) including city, latitude, longitude and
-    // value. The current providers only expose one active city reading.
-
     if (mode == HeatmapMode.aqi) {
       final dynamic dyn = aqi;
       List<dynamic>? raw;
       try {
         raw = (dyn.cityReadings as List?)?.cast<dynamic>();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[MapHeatmapLayer] Failed to read cityReadings: $e');
+      }
 
       if (raw != null && raw.isNotEmpty) {
         final points = <_HeatmapPoint>[];
@@ -158,26 +162,21 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
               ),
             );
           } catch (_) {
-            // Ignore malformed entry and continue rendering available points.
+            debugPrint('[MapHeatmapLayer] Ignored malformed AQI heatmap entry.');
           }
         }
         if (points.isNotEmpty) return points;
       }
-
-      final base = (aqi.current?.aqi ?? 88).toDouble();
-      return _buildFallbackPoints(
-        baseValue: base,
-        clampMin: 15,
-        clampMax: 320,
-        deltas: const [-28, -12, 0, 14, 32, -5, 20, 6],
-      );
+      return const [];
     }
 
     final dynamic dyn = flood;
     List<dynamic>? raw;
     try {
       raw = (dyn.cityRisks as List?)?.cast<dynamic>();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[MapHeatmapLayer] Failed to read cityRisks: $e');
+    }
 
     if (raw != null && raw.isNotEmpty) {
       final points = <_HeatmapPoint>[];
@@ -194,46 +193,12 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
             ),
           );
         } catch (_) {
-          // Ignore malformed entry and continue rendering available points.
+          debugPrint('[MapHeatmapLayer] Ignored malformed flood heatmap entry.');
         }
       }
       if (points.isNotEmpty) return points;
     }
-
-    final base = (flood.risk?.riskScore ?? 44).toDouble();
-    return _buildFallbackPoints(
-      baseValue: base,
-      clampMin: 0,
-      clampMax: 100,
-      deltas: const [-18, -10, 0, 9, 18, -6, 13, 4],
-    );
-  }
-
-  List<_HeatmapPoint> _buildFallbackPoints({
-    required double baseValue,
-    required double clampMin,
-    required double clampMax,
-    required List<int> deltas,
-  }) {
-    final entries = CityMappings.cityCoords.entries.toList(growable: false);
-    final result = <_HeatmapPoint>[];
-
-    for (var i = 0; i < entries.length; i++) {
-      final entry = entries[i];
-      final coords = entry.value;
-      final value = (baseValue + deltas[i % deltas.length])
-          .clamp(clampMin, clampMax)
-          .toDouble();
-      result.add(
-        _HeatmapPoint(
-          city: entry.key,
-          location: LatLng(coords[0], coords[1]),
-          value: value,
-        ),
-      );
-    }
-
-    return result;
+    return const [];
   }
 
   Color _colorFor(double value, HeatmapMode mode) {
@@ -256,6 +221,29 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
       return (9000 + (value.clamp(0, 300) / 300) * 23000).toDouble();
     }
     return (8000 + (value.clamp(0, 100) / 100) * 20000).toDouble();
+  }
+}
+
+class _NoHeatmapDataBanner extends StatelessWidget {
+  const _NoHeatmapDataBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Text(
+        'Live city heatmap data is unavailable right now.',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.textSecondary,
+            ),
+      ),
+    );
   }
 }
 

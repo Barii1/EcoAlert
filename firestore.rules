@@ -11,12 +11,85 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.keys().hasAll(['username', 'email', 'city', 'province', 'cnicHash']) &&
         d.username is string &&
+        d.username.size() > 0 &&
+        d.username.size() <= 80 &&
         d.email is string &&
+        d.email.size() > 0 &&
+        d.email.size() <= 120 &&
         d.city is string &&
+        d.city.size() <= 80 &&
         d.province is string &&
+        d.province.size() <= 80 &&
         d.cnicHash is string &&
-        d.cnicHash.size() == 64 &&
-        d.cnicHash.matches('^[a-f0-9A-F]{64}$');
+        (
+          d.cnicHash.size() == 0 ||
+          (
+            d.cnicHash.size() == 64 &&
+            d.cnicHash.matches('^[a-f0-9A-F]{64}$')
+          )
+        ) &&
+        (!('phoneNumber' in d) || d.phoneNumber is string) &&
+        (!('role' in d) || d.role in ['user', 'premium', 'admin']);
+    }
+
+    function hasValidReportSchema() {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+          'hazardType',
+          'details',
+          'imageCount',
+          'locationLabel',
+          'reporterUid',
+          'reporterName',
+          'status',
+          'aqi',
+          'mainPollutant',
+          'confidence',
+          'imageUrls',
+          'createdAt'
+        ]) &&
+        d.reporterUid is string &&
+        d.reporterUid.size() > 0 &&
+        d.hazardType is string &&
+        d.hazardType.size() > 0 &&
+        d.hazardType.size() <= 60 &&
+        d.details is string &&
+        d.details.size() <= 2000 &&
+        d.locationLabel is string &&
+        d.locationLabel.size() <= 150 &&
+        d.reporterName is string &&
+        d.reporterName.size() <= 80 &&
+        d.imageCount is int &&
+        d.imageCount >= 0 &&
+        d.imageCount <= 5 &&
+        (!('imageUrls' in d) || d.imageUrls is list) &&
+        (!('status' in d) || d.status in ['pending', 'approved', 'rejected', 'resolved']);
+    }
+
+    function hasValidCommunityPostSchema() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['reporterUid']) &&
+        d.reporterUid is string &&
+        d.reporterUid.size() > 0 &&
+        d.keys().hasOnly([
+          'reporterUid',
+          'reporterName',
+          'title',
+          'content',
+          'status',
+          'createdAt',
+          'updatedAt',
+          'imageUrls',
+          'locationLabel',
+          'hazardType'
+        ]) &&
+        (!('reporterName' in d) || (d.reporterName is string && d.reporterName.size() <= 80)) &&
+        (!('title' in d) || (d.title is string && d.title.size() <= 120)) &&
+        (!('content' in d) || (d.content is string && d.content.size() <= 4000)) &&
+        (!('locationLabel' in d) || (d.locationLabel is string && d.locationLabel.size() <= 150)) &&
+        (!('hazardType' in d) || (d.hazardType is string && d.hazardType.size() <= 60)) &&
+        (!('imageUrls' in d) || d.imageUrls is list) &&
+        (!('status' in d) || d.status in ['pending', 'approved', 'rejected']);
     }
 
     match /users/{uid} {
@@ -42,7 +115,8 @@ service cloud.firestore {
 
     match /reports/{reportId} {
       allow create: if request.auth != null &&
-        request.resource.data.reporterUid == request.auth.uid;
+        request.resource.data.reporterUid == request.auth.uid &&
+        hasValidReportSchema();
 
       allow read: if request.auth != null &&
         (resource.data.reporterUid == request.auth.uid || isAdmin());
@@ -62,7 +136,8 @@ service cloud.firestore {
         (resource.data.status == 'approved' || isAdmin());
 
       allow create: if request.auth != null &&
-        request.resource.data.reporterUid == request.auth.uid;
+        request.resource.data.reporterUid == request.auth.uid &&
+        hasValidCommunityPostSchema();
 
       allow update: if isAdmin();
 

@@ -19,6 +19,8 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
   final List<File> _images = [];
   final TextEditingController _detailsController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  bool _isSubmitting = false;
+  bool _didPrefillFromRoute = false;
 
   @override
   void initState() {
@@ -46,6 +48,32 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
     'Cloudburst': Icons.thunderstorm,
     'Heatwave': Icons.thermostat,
   };
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didPrefillFromRoute) return;
+    _didPrefillFromRoute = true;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! Map<String, dynamic>) return;
+
+    final rawType = (args['type'] as String?)?.toLowerCase();
+    if (rawType == 'air_quality') {
+      _selectedHazard = 'Smog / AQI';
+    } else if (rawType == 'flood') {
+      _selectedHazard = 'Flood';
+    } else if (rawType == 'heatwave') {
+      _selectedHazard = 'Heatwave';
+    } else if (rawType == 'cloudburst') {
+      _selectedHazard = 'Cloudburst';
+    }
+
+    final details = args['description'] as String?;
+    if (details != null && details.isNotEmpty) {
+      _detailsController.text = details;
+    }
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -97,7 +125,7 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
     );
   }
 
-  void _submitReport() {
+  Future<void> _submitReport() async {
     if (_selectedHazard == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -107,9 +135,11 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
       );
       return;
     }
+    if (_isSubmitting) return;
 
     final auth = context.read<AuthProvider>();
-    context.read<ReportProvider>().addReport(
+    setState(() => _isSubmitting = true);
+    final ok = await context.read<ReportProvider>().addReport(
           hazardType: _selectedHazard!,
           details: _detailsController.text,
           imageCount: _images.length,
@@ -118,6 +148,20 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
           reporterName: auth.currentUser?.username ?? 'Anonymous',
           images: _images.isNotEmpty ? _images : null,
         );
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (!ok) {
+      final error = context.read<ReportProvider>().errorMessage ??
+          'Could not submit report. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     Navigator.pushNamed(
       context,
@@ -633,14 +677,23 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
             ),
             elevation: 0,
           ),
-          onPressed: _submitReport,
-          child: const Row(
+          onPressed: _isSubmitting ? null : _submitReport,
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.send, size: 20),
-              SizedBox(width: 8),
+              if (_isSubmitting) ...[
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+              ] else ...[
+                const Icon(Icons.send, size: 20),
+                const SizedBox(width: 8),
+              ],
               Text(
-                'Submit Report',
+                _isSubmitting ? 'Submitting...' : 'Submit Report',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

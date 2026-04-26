@@ -15,6 +15,9 @@ class WaqiAqiSource implements AqiDataSource {
 
   @override
   Future<AqiReading> fetchCurrent(String city) async {
+    if (AppConfig.waqiToken.isEmpty) {
+      throw Exception('WAQI API token is not configured.');
+    }
     final station = CityMappings.getWaqiStation(city);
     final url =
         'https://api.waqi.info/feed/$station/?token=${AppConfig.waqiToken}';

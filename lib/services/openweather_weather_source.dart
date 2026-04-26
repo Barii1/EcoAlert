@@ -18,6 +18,9 @@ class OpenWeatherSource implements WeatherDataSource {
 
   @override
   Future<RainfallData> fetchRainfall(String city) async {
+    if (AppConfig.openWeatherApiKey.isEmpty) {
+      throw Exception('OpenWeather API key is not configured.');
+    }
     final mappedCity = CityMappings.getOwmCity(city);
     final response = await _dio.get(_baseUrl, queryParameters: {
       'q': mappedCity,

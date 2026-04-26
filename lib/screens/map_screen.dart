@@ -347,9 +347,14 @@ class _MapScreenState extends State<MapScreen> {
     required bool active,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
+    return Semantics(
+      button: true,
+      selected: active,
+      label: 'Map mode: $label',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -366,6 +371,7 @@ class _MapScreenState extends State<MapScreen> {
                 color: active ? AppColors.textInverse : AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
               ),
+        ),
         ),
       ),
     );

@@ -67,3 +67,12 @@ def delete_report_images(report_id: str) -> None:
     paths = [f"{report_id}/{f['name']}" for f in files]
     if paths:
         _get_supabase().storage.from_("report-images").remove(paths)
+
+
+def delete_report_image_paths(paths: list[str]) -> None:
+    """
+    Deletes specific report image paths from Supabase.
+    """
+    if not paths:
+        return
+    _get_supabase().storage.from_("report-images").remove(paths)

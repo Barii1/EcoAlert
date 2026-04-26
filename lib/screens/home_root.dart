@@ -35,10 +35,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Timer? _lastUpdatedTicker;
+  late final PageController _environmentPageController;
 
   @override
   void initState() {
     super.initState();
+    _environmentPageController = PageController(viewportFraction: 0.88);
     _lastUpdatedTicker = Timer.periodic(const Duration(minutes: 1), (_) {
       if (!mounted) return;
       setState(() {});
@@ -57,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _lastUpdatedTicker?.cancel();
+    _environmentPageController.dispose();
     super.dispose();
   }
 
@@ -381,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final isOffline = !context.watch<ConnectivityProvider>().isOnline;
                   return PageView(
                     padEnds: false,
-                    controller: PageController(viewportFraction: 0.88),
+                    controller: _environmentPageController,
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(
@@ -467,15 +470,19 @@ class _HomeScreenState extends State<HomeScreen> {
               Consumer<AlertProvider>(
                 builder: (context, alertProvider, _) {
                   if (alertProvider.alerts.isEmpty) return const SizedBox.shrink();
-                  return GestureDetector(
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(6),
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const AlertsScreen()),
                     ),
-                    child: Text(
-                      'View all',
-                      style: AppTextStyles.label.copyWith(
-                        color: AppColors.primary,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Text(
+                        'View all',
+                        style: AppTextStyles.label.copyWith(
+                          color: AppColors.primary,
+                        ),
                       ),
                     ),
                   );
@@ -606,12 +613,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GestureDetector(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MapScreen()),
-        ),
-        child: Container(
+      child: Semantics(
+        button: true,
+        label: 'Open live hazard map',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppSpacing.radius20),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MapScreen()),
+          ),
+          child: Container(
           height: 140,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radius20),
@@ -737,6 +748,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),
@@ -1032,6 +1044,7 @@ class _AlertTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _colorForType(model.type);
+    final severity = model.severity.toUpperCase();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1071,7 +1084,7 @@ class _AlertTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        if (model.severity == 'HIGH')
+                        if (severity == 'HIGH')
                           Container(
                             margin: const EdgeInsets.only(right: 6),
                             padding: const EdgeInsets.symmetric(
@@ -1140,9 +1153,13 @@ class _QuickActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
+    return Semantics(
+      button: true,
+      label: '$label. $sublabel',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppSpacing.radius16),
+        onTap: onTap,
+        child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.bgCard,
@@ -1180,6 +1197,7 @@ class _QuickActionCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

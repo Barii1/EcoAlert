@@ -104,7 +104,7 @@ class ReportProvider extends ChangeNotifier {
   }
 
   /// Submit a new hazard report.
-  Future<void> addReport({
+  Future<bool> addReport({
     required String hazardType,
     required String details,
     required int imageCount,
@@ -116,12 +116,16 @@ class ReportProvider extends ChangeNotifier {
     String? mainPollutant,
     double? confidence,
   }) async {
-    final fbUid = FirebaseAuth.instance.currentUser?.uid;
-    final uid = (fbUid != null && fbUid.isNotEmpty) ? fbUid : reporterUid;
-    final fbName = FirebaseAuth.instance.currentUser?.displayName;
-    final name = reporterName.isNotEmpty
-        ? reporterName
-        : (fbName != null && fbName.isNotEmpty ? fbName : 'User');
+    String uid = reporterUid;
+    String name = reporterName.isNotEmpty ? reporterName : 'User';
+    if (_isUsingFirebase) {
+      final fbUid = FirebaseAuth.instance.currentUser?.uid;
+      uid = (fbUid != null && fbUid.isNotEmpty) ? fbUid : reporterUid;
+      final fbName = FirebaseAuth.instance.currentUser?.displayName;
+      name = reporterName.isNotEmpty
+          ? reporterName
+          : (fbName != null && fbName.isNotEmpty ? fbName : 'User');
+    }
 
     final report = HazardReportModel(
       id: 'r-${DateTime.now().millisecondsSinceEpoch}',
@@ -140,9 +144,10 @@ class ReportProvider extends ChangeNotifier {
     );
 
     if (_isUsingFirebase) {
-      if (_firestoreService == null) return;
+      if (_firestoreService == null) return false;
       try {
         _isLoading = true;
+        _errorMessage = null;
         notifyListeners();
 
         final data = report.toJson()
@@ -155,27 +160,27 @@ class ReportProvider extends ChangeNotifier {
         if (images != null && images.isNotEmpty) {
           final urls = await UploadService.uploadReportImages(
             reportId: newDocId,
+            uid: uid,
             images: images,
           );
-          if (urls.isNotEmpty) {
-            await _firestoreService!.updateDoc(
-              FirestorePaths.reportDoc(newDocId),
-              {
-                'imageUrls': urls,
-                'imageCount': urls.length,
-              },
-            );
-          }
+          await _firestoreService!.updateDoc(
+            FirestorePaths.reportDoc(newDocId),
+            {
+              'imageUrls': urls,
+              'imageCount': urls.length,
+            },
+          );
         }
 
         _isLoading = false;
         notifyListeners();
+        return true;
       } catch (e) {
         _errorMessage = 'Failed to submit report: $e';
         _isLoading = false;
         notifyListeners();
+        return false;
       }
-      return;
     }
 
     // Demo mode — persist in memory only (no Firestore).
@@ -185,6 +190,7 @@ class ReportProvider extends ChangeNotifier {
     _isLoading = false;
     _errorMessage = null;
     notifyListeners();
+    return true;
   }
 
   Future<void> approve(String reportId) async {
