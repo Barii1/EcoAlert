@@ -15,9 +15,8 @@ param(
     [string]$end = "2026-05-04"
 )
 
-# Navigate to cloudburst folder
-$cloudburst_path = Join-Path $PSScriptRoot "cloudburst"
-Set-Location $cloudburst_path
+# Get current script location (cloudburst folder)
+$cloudburst_path = $PSScriptRoot
 
 # Activate venv
 & "$cloudburst_path\venv\Scripts\Activate.ps1"
