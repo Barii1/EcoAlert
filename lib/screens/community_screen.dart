@@ -289,7 +289,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                'â€¢',
+                                'GÇó',
                                 style: TextStyle(color: AppColors.textSecondary),
                               ),
                               const SizedBox(width: 4),

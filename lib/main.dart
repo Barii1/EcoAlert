@@ -277,13 +277,38 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  AqiProvider? _aqiProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextAqiProvider = context.read<AqiProvider>();
+
+    if (!identical(_aqiProvider, nextAqiProvider)) {
+      _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
+      _aqiProvider = nextAqiProvider;
+      _aqiProvider?.addListener(_syncDangerThemeFromAqi);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _syncDangerThemeFromAqi();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
+    super.dispose();
+  }
+
+  void _syncDangerThemeFromAqi() {
+    final aqi = _aqiProvider?.current;
+    context.read<DangerThemeProvider>().updateFromAqi(aqi);
+  }
 
   @override
   Widget build(BuildContext context) {
     final dangerTheme = context.watch<DangerThemeProvider>();
-
-    final aqiProvider = context.watch<AqiProvider>();
-    dangerTheme.updateFromAqi(aqiProvider.current);
 
     final screens = <Widget>[
       const HomeScreen(),

@@ -71,5 +71,6 @@ flutter:
   
   assets:
     - assets/images/
+    - assets/images/mountain.png
     - assets/icons/
   

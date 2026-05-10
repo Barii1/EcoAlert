@@ -200,7 +200,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       'EcoAlert',
                       style: AppTextStyles.headline.copyWith(
                         color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.2,
+                        fontFamily: 'Roboto',
                       ),
                     ),
                   ],
@@ -211,12 +213,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Row(
                     children: [
                       Icon(Icons.location_on_rounded,
-                          color: AppColors.textSecondary, size: 12),
-                      const SizedBox(width: 3),
-                      Text(
-                        authProvider.currentUser?.city ?? 'Lahore',
-                        style: AppTextStyles.bodySmall
-                            .copyWith(color: AppColors.textSecondary),
+                          color: AppColors.textDisabled, size: 11),
+                      const SizedBox(width: 4),
+                      _SplitFlapText(
+                        text: authProvider.currentUser?.city ?? 'Lahore',
                       ),
                     ],
                   ),
@@ -1001,6 +1001,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final hours = diff.inHours < 1 ? 1 : diff.inHours;
     return 'Updated $hours hour${hours == 1 ? '' : 's'} ago';
+  }
+}
+
+class _SplitFlapText extends StatelessWidget {
+  const _SplitFlapText({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final letters = text.toUpperCase().split('');
+
+    return Wrap(
+      spacing: 3,
+      children: letters
+          .map(
+            (letter) => Container(
+              width: 16,
+              height: 18,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: AppColors.borderSubtle),
+              ),
+              child: Text(
+                letter,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w600,
+                  height: 1,
+                  letterSpacing: 0,
+                  fontFamily: 'Roboto',
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
   }
 }
 

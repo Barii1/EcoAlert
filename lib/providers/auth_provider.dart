@@ -361,6 +361,7 @@ class AuthProvider extends ChangeNotifier {
       _isAuthenticated = true;
       _hasShownUpgradePrompt = _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
       _errorMessage = null;
+      onFirebaseLoginSuccess?.call();
 
       return true;
     } on FirebaseAuthException catch (e) {
