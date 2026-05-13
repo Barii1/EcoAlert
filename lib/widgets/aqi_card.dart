@@ -99,13 +99,14 @@ class AqiCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.p20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.p20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -118,9 +119,9 @@ class AqiCard extends StatelessWidget {
                             style: AppTextStyles.label.copyWith(
                               color: AppColors.textSecondary,
                               letterSpacing: 1.2,
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                       Text(
                         reading.city.toUpperCase(),

@@ -30,6 +30,7 @@ import 'screens/report_confirmation_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/aqi_detail_screen.dart';
 import 'screens/flood_detail_screen.dart';
+import 'screens/model_status_screen.dart';
 import 'providers/alert_provider.dart';
 import 'providers/aqi_provider.dart';
 import 'providers/flood_provider.dart';
@@ -181,6 +182,7 @@ class EcoAlertApp extends StatelessWidget {
                 '/admin': (_) => const AdminDashboardScreen(),
                 '/aqi-detail': (_) => const AqiDetailScreen(),
                 '/flood-detail': (_) => const FloodDetailScreen(),
+                '/model-status': (_) => const ModelStatusScreen(),
                 '/aqi-scan': (_) => const AqiScanScreen(),
                 '/alerts': (_) => const AlertsScreen(),
               };

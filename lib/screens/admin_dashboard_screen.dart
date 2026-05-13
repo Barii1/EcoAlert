@@ -10,6 +10,7 @@ import 'admin_report_management_screen.dart';
 import 'admin_user_management_screen.dart';
 import 'admin_content_management_screen.dart';
 import 'admin_system_settings_screen.dart';
+import 'model_status_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -609,6 +610,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Model Status button ──────────────────────────────
+                    _buildQuickAccessButton(
+                      icon: Icons.psychology_rounded,
+                      label: '🤖  Model Status — Live ML Diagnostics',
+                      onTap: () => Navigator.pushNamed(context, '/model-status'),
                     ),
                     const SizedBox(height: 24),
 
