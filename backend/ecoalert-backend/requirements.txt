@@ -1,6 +1,12 @@
-﻿flask==3.0.2
+flask==3.0.2
 flask-cors==4.0.0
+gunicorn==21.2.0
 supabase==2.4.0
 firebase-admin==6.4.0
 python-dotenv==1.0.1
 Pillow==10.2.0
+joblib==1.4.2
+numpy==1.26.4
+scikit-learn==1.8.0
+pandas==2.2.2
+requests==2.31.0
