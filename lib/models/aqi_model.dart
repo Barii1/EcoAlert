@@ -72,6 +72,21 @@ class AqiReading {
     }
   }
 
+  /// Best-effort dominant pollutant label from component concentrations (sensor API).
+  String get dominantPollutantLabel {
+    final pairs = <(String, double)>[
+      ('PM2.5', pm25),
+      ('PM10', pm10),
+      ('O3', o3),
+      ('NO2', no2),
+      ('CO', co),
+    ];
+    pairs.sort((a, b) => b.$2.compareTo(a.$2));
+    final top = pairs.first;
+    if (top.$2 <= 0) return 'AQI index';
+    return top.$1;
+  }
+
   String get categoryLabel {
     switch (category) {
       case AqiCategory.good: return 'Good';

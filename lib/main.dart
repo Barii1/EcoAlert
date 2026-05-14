@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'config/app_colors.dart';
+import 'config/app_navigator.dart';
 import 'services/firestore_service.dart';
 import 'services/notification_service.dart';
 import 'screens/splash_screen.dart';
@@ -157,6 +158,7 @@ class EcoAlertApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
+            navigatorKey: appNavigatorKey,
             title: 'EcoAlert',
             debugShowCheckedModeBanner: false,
             onGenerateRoute: (settings) {

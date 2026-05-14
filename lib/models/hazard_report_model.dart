@@ -29,9 +29,10 @@ class HazardReportModel {
   final DateTime createdAt;
   final ReportStatus status;
 
-  // Hard-coded "AI inference" fields for demo.
+  /// Regional AQI / pollutant snapshot when provided (e.g. from WAQI); otherwise 0 / empty.
   final int aqi;
   final String mainPollutant;
+  /// Model confidence 0–1 when the backend supplies it; 0 means not scored.
   final double confidence;
 
   // Backend fields

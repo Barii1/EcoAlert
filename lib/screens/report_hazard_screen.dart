@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models/user_model.dart';
+import '../providers/aqi_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/report_provider.dart';
 
@@ -138,6 +139,16 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
     if (_isSubmitting) return;
 
     final auth = context.read<AuthProvider>();
+    final reading = context.read<AqiProvider>().current;
+    int? reportAqi;
+    String? reportPollutant;
+    double? reportConfidence;
+    if (_selectedHazard == 'Smog / AQI' && reading != null) {
+      reportAqi = reading.aqi;
+      reportPollutant = reading.dominantPollutantLabel;
+      reportConfidence = null;
+    }
+
     setState(() => _isSubmitting = true);
     final ok = await context.read<ReportProvider>().addReport(
           hazardType: _selectedHazard!,
@@ -147,6 +158,9 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
           reporterUid: auth.currentUser?.id ?? '',
           reporterName: auth.currentUser?.username ?? 'Anonymous',
           images: _images.isNotEmpty ? _images : null,
+          aqi: reportAqi,
+          mainPollutant: reportPollutant,
+          confidence: reportConfidence,
         );
     if (!mounted) return;
     setState(() => _isSubmitting = false);
