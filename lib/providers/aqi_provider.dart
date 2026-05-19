@@ -119,7 +119,7 @@ class AqiProvider extends ChangeNotifier {
 
   Map<String, dynamic> _aqiToJson(AqiReading r) => {
         'aqi': r.aqi,
-        'category': r.category,
+      'category': r.category.name,
         'pm25': r.pm25,
         'pm10': r.pm10,
         'o3': r.o3,

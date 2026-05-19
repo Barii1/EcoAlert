@@ -36,17 +36,18 @@ class AlertCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                color: severityColor,
-                width: 4,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: severityColor,
+                  width: 4,
+                ),
               ),
             ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Padding(
+            child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,6 +158,7 @@ class AlertCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
             ),
           ),
         ),

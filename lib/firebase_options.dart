@@ -1,10 +1,14 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+  show defaultTargetPlatform, TargetPlatform, kIsWeb;
 
 /// Firebase configuration for the EcoAlert project (ecoalert-31c81).
 /// Values sourced from google-services.json.
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      return web;
+    }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
@@ -33,9 +37,19 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.example.ecoalert',
   );
 
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyCH574hpzmDJFuFYFKEPpt6CW57l1KWYI0',
+    appId: '1:125523315849:web:2fd1e55eab612b0ca94a58',
+    messagingSenderId: '125523315849',
+    projectId: 'ecoalert-31c81',
+    authDomain: 'ecoalert-31c81.firebaseapp.com',
+    storageBucket: 'ecoalert-31c81.firebasestorage.app',
+  );
+
   /// Returns true if Firebase has been configured with real credentials.
   static bool get isConfigured {
     return currentPlatform.apiKey != 'YOUR_ANDROID_API_KEY' &&
-        currentPlatform.apiKey != 'YOUR_IOS_API_KEY';
+        currentPlatform.apiKey != 'YOUR_IOS_API_KEY' &&
+        currentPlatform.apiKey != 'YOUR_WEB_API_KEY';
   }
 }

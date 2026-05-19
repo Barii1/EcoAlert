@@ -39,13 +39,42 @@ MODEL_CANDIDATES = [
     _HERE / "models" / "best_cloudburst_model.pkl",     # local copy fallback
 ]
 
+AQI_MODEL_CANDIDATES = [
+    _REPO_ROOT / "AQI" / "models" / "best_aqi_numerical_model.pkl",
+    _HERE.parent / "models" / "best_aqi_numerical_model.pkl",
+]
+
+AQI_METADATA_CANDIDATES = [
+    _REPO_ROOT / "AQI" / "models" / "aqi_numerical_metadata.json",
+    _HERE.parent / "models" / "aqi_numerical_metadata.json",
+]
+
 # ── Feature contract (must match training exactly) ────────────────────────
 FEATURE_COLS = ["temperature", "humidity", "pressure", "cloud_cover", "wind_speed", "dew_point"]
+
+AQI_FEATURE_COLS = [
+    "pm25",
+    "pm10",
+    "no2",
+    "o3",
+    "co",
+    "temperature",
+    "humidity",
+    "wind_speed",
+]
 
 # ── Risk thresholds (from cloudburst/src/config.py) ──────────────────────
 THRESHOLD           = 0.50
 LOW_RISK_CUTOFF     = 0.30
 MODERATE_RISK_CUTOFF = 0.60
+
+AQI_CLASS_TO_VALUE = {
+    1: 25,
+    2: 75,
+    3: 125,
+    4: 175,
+    5: 250,
+}
 
 # ── Open-Meteo forecast endpoint (free, no key) ───────────────────────────
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -56,6 +85,12 @@ OPEN_METEO_HOURLY_VARS = [
     "dew_point_2m",
     "pressure_msl",
     "cloud_cover",
+    "wind_speed_10m",
+]
+
+AQI_OPEN_METEO_CURRENT_VARS = [
+    "temperature_2m",
+    "relative_humidity_2m",
     "wind_speed_10m",
 ]
 
@@ -83,7 +118,11 @@ class ModelService:
     def __init__(self):
         self._model = None
         self._model_path = None
+        self._aqi_model = None
+        self._aqi_model_path = None
+        self._aqi_feature_cols = AQI_FEATURE_COLS
         self._load_model()
+        self._load_aqi_model()
 
     # ─────────────────────────────────────────────────────────────────────
     # Public API
@@ -137,12 +176,28 @@ class ModelService:
             return self._predict_with_model(enriched, city)
         return self._rule_based_cloudburst(enriched, city)
 
+    def predict_aqi(self, features: dict, city: str = "") -> dict:
+        """
+        Predict AQI from pollutant readings and weather context.
+
+        The trained AQI model in this repository is a classifier that predicts
+        an AQI class. We convert that class to a representative AQI value so
+        the Flutter UI can continue working with numeric AQI readings.
+        """
+        enriched = self._enrich_aqi_features(features, city)
+        if self._aqi_model is not None:
+            return self._predict_aqi_with_model(enriched, city)
+        return self._rule_based_aqi(enriched, city)
+
     @property
     def status(self) -> dict:
         return {
             "cloudburst_model_loaded": self._model is not None,
             "model_path": str(self._model_path) if self._model_path else None,
             "feature_cols": FEATURE_COLS,
+            "aqi_model_loaded": self._aqi_model is not None,
+            "aqi_model_path": str(self._aqi_model_path) if self._aqi_model_path else None,
+            "aqi_feature_cols": self._aqi_feature_cols,
             "thresholds": {
                 "low":      f"< {LOW_RISK_CUTOFF}",
                 "moderate": f"{LOW_RISK_CUTOFF} – {MODERATE_RISK_CUTOFF}",
@@ -169,6 +224,35 @@ class ModelService:
         logger.warning(
             "[ModelService] No model file found. Checked: %s",
             [str(p) for p in MODEL_CANDIDATES],
+        )
+
+    def _load_aqi_model(self):
+        metadata = None
+        for meta_candidate in AQI_METADATA_CANDIDATES:
+            if meta_candidate.exists():
+                try:
+                    with open(meta_candidate, "r", encoding="utf-8") as f:
+                        metadata = json.load(f)
+                    self._aqi_feature_cols = metadata.get("feature_cols", AQI_FEATURE_COLS)
+                    logger.info("[ModelService] Loaded AQI metadata: %s", meta_candidate)
+                    break
+                except Exception as e:
+                    logger.error("[ModelService] Failed to load AQI metadata %s: %s", meta_candidate, e)
+
+        for candidate in AQI_MODEL_CANDIDATES:
+            if candidate.exists():
+                try:
+                    import joblib
+                    self._aqi_model = joblib.load(candidate)
+                    self._aqi_model_path = candidate
+                    logger.info("[ModelService] Loaded AQI model: %s", candidate)
+                    return
+                except Exception as e:
+                    logger.error("[ModelService] Failed to load AQI model %s: %s", candidate, e)
+
+        logger.warning(
+            "[ModelService] No AQI model file found. Checked: %s",
+            [str(p) for p in AQI_MODEL_CANDIDATES],
         )
 
     # ─────────────────────────────────────────────────────────────────────
@@ -258,6 +342,62 @@ class ModelService:
             logger.error("[ModelService] Prediction error: %s", e)
             return self._rule_based_cloudburst(features, city)
 
+    def _predict_aqi_with_model(self, features: dict, city: str) -> dict:
+        try:
+            import pandas as pd
+
+            X = pd.DataFrame([{col: features.get(col, 0.0) for col in self._aqi_feature_cols}])
+            raw_pred = self._aqi_model.predict(X)[0]
+
+            predicted_class = None
+            if hasattr(self._aqi_model, "classes_"):
+                try:
+                    predicted_class = int(raw_pred)
+                except Exception:
+                    predicted_class = None
+
+            if predicted_class in AQI_CLASS_TO_VALUE:
+                predicted_value = AQI_CLASS_TO_VALUE[predicted_class]
+                source_label = f"class {predicted_class}"
+            else:
+                predicted_value = int(round(float(raw_pred)))
+                source_label = "regression"
+
+            predicted_value = max(0, min(500, predicted_value))
+            category = self._aqi_category_from_value(predicted_value)
+
+            proba = None
+            if hasattr(self._aqi_model, "predict_proba"):
+                try:
+                    proba = self._aqi_model.predict_proba(X)[0]
+                except Exception:
+                    proba = None
+
+            confidence = float(max(proba)) if proba is not None else None
+
+            logger.info(
+                "[ModelService] AQI → %s (%s) | model=True | city=%s",
+                predicted_value,
+                category,
+                city,
+            )
+
+            return {
+                "predicted_aqi": predicted_value,
+                "predicted_category": category,
+                "predicted_class": predicted_class,
+                "using_model": True,
+                "model_loaded": True,
+                "source": source_label,
+                "confidence": round(confidence, 4) if confidence is not None else None,
+                "features_used": features,
+                "city": city,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        except Exception as e:
+            logger.error("[ModelService] AQI prediction error: %s", e)
+            return self._rule_based_aqi(features, city)
+
     # ─────────────────────────────────────────────────────────────────────
     # Rule-based fallback (used when model file is missing)
     # ─────────────────────────────────────────────────────────────────────
@@ -284,6 +424,42 @@ class ModelService:
             "timestamp":              datetime.utcnow().isoformat(),
         }
 
+    def _rule_based_aqi(self, features: dict, city: str) -> dict:
+        pm25 = float(features.get("pm25", 0) or 0)
+        pm10 = float(features.get("pm10", 0) or 0)
+        no2 = float(features.get("no2", 0) or 0)
+        o3 = float(features.get("o3", 0) or 0)
+        co = float(features.get("co", 0) or 0)
+        temperature = float(features.get("temperature", 0) or 0)
+        humidity = float(features.get("humidity", 0) or 0)
+        wind_speed = float(features.get("wind_speed", 0) or 0)
+
+        score = 0.0
+        score += min(pm25 / 250.0, 1.0) * 0.42
+        score += min(pm10 / 300.0, 1.0) * 0.2
+        score += min(no2 / 200.0, 1.0) * 0.12
+        score += min(o3 / 200.0, 1.0) * 0.1
+        score += min(co / 10.0, 1.0) * 0.08
+        score += max(0.0, min((humidity - 30.0) / 70.0, 1.0)) * 0.05
+        score += max(0.0, min((35.0 - wind_speed) / 35.0, 1.0)) * 0.03
+        score -= max(0.0, min((temperature - 20.0) / 25.0, 1.0)) * 0.02
+
+        predicted_value = int(round(max(0.0, min(500.0, score * 500.0))))
+        category = self._aqi_category_from_value(predicted_value)
+
+        return {
+            "predicted_aqi": predicted_value,
+            "predicted_category": category,
+            "predicted_class": None,
+            "using_model": False,
+            "model_loaded": False,
+            "source": "rule-based estimate",
+            "confidence": None,
+            "features_used": features,
+            "city": city,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
     # ─────────────────────────────────────────────────────────────────────
     # Utility
     # ─────────────────────────────────────────────────────────────────────
@@ -303,6 +479,70 @@ class ModelService:
         a, b = 17.27, 237.7
         gamma = math.log(humidity / 100.0) + (a * temp_c / (b + temp_c))
         return (b * gamma) / (a - gamma)
+
+    @staticmethod
+    def _aqi_category_from_value(value: int) -> str:
+        if value <= 50:
+            return "Good"
+        if value <= 100:
+            return "Moderate"
+        if value <= 150:
+            return "Unhealthy for Sensitive Groups"
+        if value <= 200:
+            return "Unhealthy"
+        if value <= 300:
+            return "Very Unhealthy"
+        return "Hazardous"
+
+    def _normalize_aqi_features(self, features: dict) -> dict:
+        f = dict(features)
+        for key in self._aqi_feature_cols:
+            value = f.get(key, 0)
+            try:
+                f[key] = float(value)
+            except Exception:
+                f[key] = 0.0
+        return f
+
+    def _enrich_aqi_features(self, features: dict, city: str) -> dict:
+        f = self._normalize_aqi_features(features)
+
+        missing_weather = (
+            f.get("temperature", 0) == 0
+            or f.get("humidity", 0) == 0
+            or f.get("wind_speed", 0) == 0
+        )
+        if not missing_weather:
+            return f
+
+        coords = self.city_to_coords(city)
+        if not coords:
+            return f
+
+        try:
+            resp = requests.get(
+                OPEN_METEO_FORECAST_URL,
+                params={
+                    "latitude": coords[0],
+                    "longitude": coords[1],
+                    "current": ",".join(AQI_OPEN_METEO_CURRENT_VARS),
+                    "timezone": "auto",
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json().get("current", {})
+
+            if f.get("temperature", 0) == 0:
+                f["temperature"] = float(data.get("temperature_2m") or 0)
+            if f.get("humidity", 0) == 0:
+                f["humidity"] = float(data.get("relative_humidity_2m") or 0)
+            if f.get("wind_speed", 0) == 0:
+                f["wind_speed"] = float(data.get("wind_speed_10m") or 0)
+        except Exception as e:
+            logger.warning("[ModelService] AQI weather enrichment failed: %s", e)
+
+        return f
 
     @staticmethod
     def _enrich_features(features: dict) -> dict:

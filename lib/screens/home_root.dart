@@ -347,6 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
             isLoading: weatherProvider.isLoading,
             currentWeather: weatherProvider.current,
             showCachedBadge: isOffline && weatherProvider.current != null,
+            onRetry: weatherProvider.retry,
           );
         },
       ),
@@ -388,7 +389,6 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (context, aqi, _) {
               return Consumer<FloodProvider>(
                 builder: (context, flood, _) {
-                  final isOffline = !context.watch<ConnectivityProvider>().isOnline;
                   return PageView(
                     padEnds: false,
                     controller: _environmentPageController,
@@ -401,9 +401,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             : aqi.hasError && aqi.current == null
                                 ? _buildErrorCard(
                                     aqi.errorMessage ?? 'Error', aqi.retry)
-                                : aqi.current != null
+                                    : aqi.current != null
                               ? _withCachedBadge(
-                                showBadge: isOffline,
+                                showBadge: aqi.isFromCache,
                                 child: AqiCard(
                                   reading: aqi.current!,
                                   onTap: () => Navigator.pushNamed(
@@ -421,9 +421,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             : flood.hasError && flood.risk == null
                                 ? _buildErrorCard(
                                     flood.errorMessage ?? 'Error', flood.retry)
-                                : flood.risk != null
+                                    : flood.risk != null
                               ? _withCachedBadge(
-                                showBadge: isOffline,
+                                showBadge: flood.isFromCache,
                                 child: FloodRiskCard(
                                   risk: flood.risk!,
                                   onTap: () => Navigator.pushNamed(

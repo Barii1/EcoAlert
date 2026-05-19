@@ -76,3 +76,26 @@ def delete_report_image_paths(paths: list[str]) -> None:
     if not paths:
         return
     _get_supabase().storage.from_("report-images").remove(paths)
+
+
+def log_event(table: str, payload: dict) -> None:
+    """
+    Inserts a row into a Supabase table for analytics/audit logging.
+    """
+    try:
+        _get_supabase().table(table).insert(payload).execute()
+    except Exception:
+        # Avoid breaking request flows if logging fails.
+        return
+
+
+def log_prediction(payload: dict) -> None:
+    log_event("prediction_logs", payload)
+
+
+def log_upload(payload: dict) -> None:
+    log_event("upload_logs", payload)
+
+
+def log_audit(payload: dict) -> None:
+    log_event("audit_logs", payload)

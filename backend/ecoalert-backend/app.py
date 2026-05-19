@@ -7,8 +7,10 @@ logging.basicConfig(level=logging.INFO)
 from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
+from asgiref.wsgi import WsgiToAsgi
 from routes.upload_routes import upload_bp
 from routes.predict_routes import predict_bp
+from routes.admin_routes import admin_bp
 
 # Load .env so CORS_ALLOWED_ORIGINS, FLASK_HOST, PORT etc. are available
 # before any blueprint or model initialises.
@@ -31,11 +33,15 @@ else:
 
 app.register_blueprint(upload_bp)
 app.register_blueprint(predict_bp)
+app.register_blueprint(admin_bp)
 
 
 @app.route("/health", methods=["GET"])
 def health():
     return {"status": "ok", "service": "EcoAlert Backend"}, 200
+
+
+asgi_app = WsgiToAsgi(app)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 ﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import '../utils/hash_utils.dart';
 
 class FirebaseAuthService {
@@ -57,11 +58,21 @@ class FirebaseAuthService {
     required String email,
     required String password,
   }) async {
-    final credential = await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-    return credential.user;
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return credential.user;
+    } on FirebaseAuthException catch (e) {
+      // Log the Firebase error code for debugging invalid credentials.
+      // Examples: invalid-credential, user-not-found, wrong-password
+      debugPrint('[FirebaseAuthService] signIn error: ${e.code} ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('[FirebaseAuthService] signIn error: $e');
+      rethrow;
+    }
   }
 
   // ─── Sign Out ────────────────────────────────────────────────

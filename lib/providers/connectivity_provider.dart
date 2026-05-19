@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 
 class ConnectivityProvider extends ChangeNotifier {
   bool _isOnline = true;
@@ -42,10 +44,11 @@ class ConnectivityProvider extends ChangeNotifier {
 
   Future<void> _checkConnectivity() async {
     try {
-      // Google's generate_204 is designed for connectivity checks — returns 204 when online
-      final result = await http
-          .get(Uri.parse('https://www.google.com/generate_204'))
-          .timeout(const Duration(seconds: 5));
+        final Uri uri = kIsWeb
+          ? Uri.parse('${AppConfig.uploadApiBaseUrl}/api/predict/status')
+          : Uri.parse('https://www.google.com/generate_204');
+
+      final result = await http.get(uri).timeout(const Duration(seconds: 5));
 
       final wasOnline = _isOnline;
       _isOnline = result.statusCode == 204 || result.statusCode == 200;
@@ -55,6 +58,7 @@ class ConnectivityProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
+      debugPrint('[Connectivity] Check failed: $e');
       // No connectivity
       if (_isOnline) {
         _isOnline = false;

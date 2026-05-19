@@ -6,17 +6,14 @@ class AppConfig {
   static const String waqiToken = ApiKeys.waqi;
   static const String openWeatherApiKey = String.fromEnvironment(
     'OPENWEATHER_API_KEY',
-    defaultValue: 'http://10.0.2.2:5000',
+    defaultValue: '',
   );
-  // ── PRODUCTION URL ────────────────────────────────────────────────────────
-  // After deploying to Railway, paste your URL here as the defaultValue.
-  // Example: 'https://ecoalert-backend-production.up.railway.app'
-  // For local Android emulator testing keep: 'http://10.0.2.2:5000'
-  // For physical device on same WiFi use: 'http://192.168.1.15:5000'
+  // Backend base URL (override with --dart-define=UPLOAD_API_BASE_URL=...).
+  // Android emulator: use http://10.0.2.2:5000 instead of localhost.
   static const String uploadApiBaseUrl = String.fromEnvironment(
     'UPLOAD_API_BASE_URL',
-    defaultValue: 'PLACEHOLDER_REPLACE_WITH_RAILWAY_URL',
+    defaultValue: 'http://127.0.0.1:5000',
   );
-  static const String defaultCity = 'lahore';
+  static const String defaultCity = 'Lahore';
   static const int refreshIntervalMinutes = 15;
 }

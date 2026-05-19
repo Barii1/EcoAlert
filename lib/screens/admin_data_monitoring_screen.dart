@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 
 class AdminDataMonitoringScreen extends StatefulWidget {
   const AdminDataMonitoringScreen({super.key});
@@ -11,6 +15,19 @@ class AdminDataMonitoringScreen extends StatefulWidget {
 class _AdminDataMonitoringScreenState extends State<AdminDataMonitoringScreen> {
   String _selectedTab = 'AQI';
   final List<double> _chartData = [0.45, 0.55, 0.40, 0.60, 0.75, 0.65, 0.80, 0.90, 0.95, 0.88];
+
+  String _logType = 'prediction';
+  bool _logsLoading = false;
+  String? _logsError;
+  List<Map<String, dynamic>> _logs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (_selectedTab == 'Logs') {
+      _loadLogs();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +101,11 @@ class _AdminDataMonitoringScreenState extends State<AdminDataMonitoringScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
+
+                    if (_selectedTab == 'Logs') ...[
+                      _buildLogsSection(),
+                      const SizedBox(height: 20),
+                    ] else ...[
 
                     // Live Trend Section
                     Row(
@@ -450,6 +472,7 @@ class _AdminDataMonitoringScreenState extends State<AdminDataMonitoringScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
+                    ],
                   ],
                 ),
               ),
@@ -494,6 +517,9 @@ class _AdminDataMonitoringScreenState extends State<AdminDataMonitoringScreen> {
         setState(() {
           _selectedTab = value;
         });
+        if (value == 'Logs') {
+          _loadLogs();
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -510,6 +536,183 @@ class _AdminDataMonitoringScreenState extends State<AdminDataMonitoringScreen> {
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _loadLogs() async {
+    if (_logsLoading) return;
+    setState(() {
+      _logsLoading = true;
+      _logsError = null;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() {
+          _logsError = 'Sign in as admin to view logs.';
+          _logsLoading = false;
+        });
+        return;
+      }
+
+      final token = await user.getIdToken();
+      final uri = Uri.parse(
+        '${AppConfig.uploadApiBaseUrl}/api/admin/logs?type=$_logType&limit=50',
+      );
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode != 200) {
+        setState(() {
+          _logsError = 'Failed to load logs (${response.statusCode}).';
+          _logsLoading = false;
+        });
+        return;
+      }
+
+      final body = response.body;
+      final decoded = body.isNotEmpty ? jsonDecode(body) as Map<String, dynamic> : {};
+      final data = (decoded['data'] as List<dynamic>? ?? [])
+          .map((e) => e as Map<String, dynamic>)
+          .toList();
+
+      setState(() {
+        _logs = data;
+        _logsLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _logsError = 'Failed to load logs: $e';
+        _logsLoading = false;
+      });
+    }
+  }
+
+  Widget _buildLogsSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF162e2e),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Recent Logs',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              DropdownButton<String>(
+                value: _logType,
+                dropdownColor: const Color(0xFF162e2e),
+                underline: const SizedBox.shrink(),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                items: const [
+                  DropdownMenuItem(value: 'prediction', child: Text('Predictions')),
+                  DropdownMenuItem(value: 'upload', child: Text('Uploads')),
+                  DropdownMenuItem(value: 'audit', child: Text('Audit')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _logType = value;
+                  });
+                  _loadLogs();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_logsLoading)
+            const Center(
+              child: CircularProgressIndicator(color: Color(0xFF06e0e0)),
+            )
+          else if (_logsError != null)
+            Text(
+              _logsError!,
+              style: TextStyle(color: Colors.red[300], fontSize: 12),
+            )
+          else if (_logs.isEmpty)
+            Text(
+              'No logs found yet.',
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+            )
+          else
+            Column(
+              children: _logs.map((row) => _buildLogRow(row)).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogRow(Map<String, dynamic> row) {
+    final type = row['type']?.toString() ?? row['action']?.toString() ?? 'log';
+    final city = row['city']?.toString();
+    final createdAt = row['created_at']?.toString() ?? '';
+    final title = city != null && city.isNotEmpty ? '$type · $city' : type;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0f2323),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (createdAt.isNotEmpty)
+                  Text(
+                    createdAt,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                  ),
+              ],
+            ),
+          ),
+          if (row['using_model'] != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: (row['using_model'] == true)
+                    ? const Color(0xFF06e0e0).withOpacity(0.15)
+                    : Colors.orange.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                row['using_model'] == true ? 'ML' : 'Rule',
+                style: TextStyle(
+                  color: row['using_model'] == true
+                      ? const Color(0xFF06e0e0)
+                      : Colors.orange,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

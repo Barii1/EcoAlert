@@ -119,9 +119,9 @@ class AqiCard extends StatelessWidget {
                             style: AppTextStyles.label.copyWith(
                               color: AppColors.textSecondary,
                               letterSpacing: 1.2,
-                            ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                       Text(
                         reading.city.toUpperCase(),
@@ -202,6 +202,7 @@ class AqiCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
             ),
             Container(
               height: 4,

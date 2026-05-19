@@ -4,7 +4,17 @@ service cloud.firestore {
 
     function isAdmin() {
       return request.auth != null &&
-        request.auth.token.role == 'admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isSelf(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function roleUnchangedOrAdmin() {
+      return !('role' in request.resource.data) ||
+        request.resource.data.role == resource.data.role ||
+        isAdmin();
     }
 
     function hasRequiredUserFields() {
@@ -94,18 +104,17 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if request.auth != null &&
-        (request.auth.uid == uid || isAdmin());
+        (isSelf(uid) || isAdmin());
 
-      allow create: if request.auth != null &&
-        request.auth.uid == uid &&
-        hasRequiredUserFields();
+      allow create: if isSelf(uid) &&
+        hasRequiredUserFields() &&
+        !('role' in request.resource.data);
 
-      allow update: if request.auth != null &&
-        request.auth.uid == uid &&
-        hasRequiredUserFields();
+      allow update: if isSelf(uid) &&
+        hasRequiredUserFields() &&
+        roleUnchangedOrAdmin();
 
-      allow delete: if request.auth != null &&
-        request.auth.uid == uid;
+      allow delete: if isSelf(uid);
     }
 
     match /alerts/{alertId} {
@@ -123,7 +132,8 @@ service cloud.firestore {
 
       allow update: if isAdmin();
 
-      allow delete: if false;
+      allow delete: if request.auth != null &&
+        resource.data.reporterUid == request.auth.uid;
     }
 
     match /environmental_snapshots/{docId} {

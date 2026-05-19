@@ -106,17 +106,52 @@ class RemotePredictService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // AQI — pass-through (no custom ML AQI model deployed yet)
-  // AQI data comes from the WAQI sensor API directly; this method exists so
-  // AqiProvider can call it without crashing. When a forecasting model is
-  // added to the Flask backend at /api/predict/aqi, implement the HTTP call
-  // here and remove the pass-through.
+  // AQI prediction now calls the Flask backend model endpoint.
   // ─────────────────────────────────────────────────────────────────────────
 
   Future<AqiReading> predictAqi({required AqiReading currentReading}) async {
-    // TODO: replace with real HTTP call when AQI forecast model is deployed.
-    // e.g. POST $_baseUrl/api/predict/aqi with currentReading fields.
-    debugPrint('[RemotePredictService] predictAqi — pass-through (no AQI model yet)');
-    return currentReading;
+    final body = jsonEncode({
+      'pm25': currentReading.pm25,
+      'pm10': currentReading.pm10,
+      'no2': currentReading.no2,
+      'o3': currentReading.o3,
+      'co': currentReading.co,
+      'city': currentReading.city,
+    });
+
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/api/predict/aqi'),
+          headers: {'Content-Type': 'application/json'},
+          body: body,
+        )
+        .timeout(_timeout);
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        '[RemotePredictService] AQI API returned ${response.statusCode}: ${response.body}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final predictedAqi = (data['predicted_aqi'] as num?)?.toInt() ?? currentReading.aqi;
+    final category = AqiReading.categoryFromIndex(predictedAqi);
+
+    debugPrint(
+      '[RemotePredictService] AQI → $predictedAqi | model=${data['using_model'] == true} | city=${currentReading.city}',
+    );
+
+    return AqiReading(
+      aqi: predictedAqi,
+      category: category,
+      pm25: currentReading.pm25,
+      pm10: currentReading.pm10,
+      o3: currentReading.o3,
+      no2: currentReading.no2,
+      co: currentReading.co,
+      timestamp: DateTime.now(),
+      city: currentReading.city,
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────

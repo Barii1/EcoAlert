@@ -3,11 +3,13 @@ EcoAlert Prediction Routes
 ==========================
 POST /api/predict/cloudburst  — main prediction endpoint (lat/lon)
 POST /api/predict/cloudburst/features — prediction from raw features
+POST /api/predict/aqi         — AQI prediction from sensor readings
 GET  /api/predict/status      — model health check
 """
 
 from flask import Blueprint, request, jsonify
 from services.model_service import model_service, CITY_COORDS
+from services.supabase_service import log_prediction
 
 predict_bp = Blueprint("predict", __name__, url_prefix="/api/predict")
 
@@ -69,6 +71,13 @@ def predict_cloudburst():
             longitude=float(longitude),
             city=city,
         )
+        log_prediction({
+            "type": "cloudburst",
+            "city": result.get("city") or city,
+            "using_model": result.get("using_model"),
+            "risk_level": result.get("risk_level"),
+            "probability": result.get("cloudburst_probability"),
+        })
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -102,6 +111,52 @@ def predict_cloudburst_from_features():
 
     try:
         result = model_service.predict_cloudburst_from_features(data, city)
+        log_prediction({
+            "type": "cloudburst_features",
+            "city": result.get("city") or city,
+            "using_model": result.get("using_model"),
+            "risk_level": result.get("risk_level"),
+            "probability": result.get("cloudburst_probability"),
+        })
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── AQI prediction from current pollutant readings ────────────────────────
+@predict_bp.route("/aqi", methods=["POST"])
+def predict_aqi():
+    """
+    Predict AQI from current pollutant readings and weather context.
+
+    Request body:
+    {
+        "pm25": 35.2,
+        "pm10": 61.8,
+        "no2": 18.4,
+        "o3": 22.1,
+        "co": 1.1,
+        "city": "Lahore"
+    }
+    """
+    data = request.get_json(silent=True) or {}
+    city = data.pop("city", "")
+
+    required = ["pm25", "pm10", "no2", "o3", "co"]
+    missing = [k for k in required if k not in data]
+    if missing:
+        return jsonify({"error": f"Missing fields: {missing}"}), 400
+
+    try:
+        result = model_service.predict_aqi(data, city)
+        log_prediction({
+            "type": "aqi",
+            "city": result.get("city") or city,
+            "using_model": result.get("using_model"),
+            "predicted_aqi": result.get("predicted_aqi"),
+            "predicted_category": result.get("predicted_category"),
+            "predicted_class": result.get("predicted_class"),
+        })
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500

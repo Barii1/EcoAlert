@@ -48,20 +48,16 @@ import 'utils/page_transitions.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase (Android uses google-services.json / firebase_options).
+  // Initialize Firebase (web + mobile).
   bool firebaseReady = false;
-  if (!kIsWeb) {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      firebaseReady = true;
-      debugPrint('[EcoAlert] Firebase initialized successfully');
-    } catch (e) {
-      debugPrint('[EcoAlert] Firebase init failed, running in demo mode: $e');
-    }
-  } else {
-    debugPrint('[EcoAlert] Web build — skipping Firebase init (demo mode)');
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    firebaseReady = true;
+    debugPrint('[EcoAlert] Firebase initialized successfully');
+  } catch (e) {
+    debugPrint('[EcoAlert] Firebase init failed, running in demo mode: $e');
   }
 
   // Load theme preference before app starts

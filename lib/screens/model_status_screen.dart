@@ -570,16 +570,12 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  _statusRow(
-                    icon: Icons.sensors_rounded,
-                    label: 'Data Source',
-                    value: 'WAQI API (live sensor)',
-                    valueColor: AppColors.success,
-                    expand: false,
-                  ),
-                ],
+              _statusRow(
+                icon: Icons.sensors_rounded,
+                label: 'Data Source',
+                value: 'WAQI API (live sensor)',
+                valueColor: AppColors.success,
+                expand: false,
               ),
               _divider(),
               Row(

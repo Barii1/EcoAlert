@@ -30,8 +30,15 @@ class WeatherProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final coords = CityMappings.cityCoords[city];
-      if (coords == null) throw Exception('No coordinates for $city');
+      final normalizedCity = city.trim();
+      List<double>? coords = CityMappings.cityCoords[normalizedCity];
+      coords ??= CityMappings.cityCoords.entries
+          .firstWhere(
+            (entry) => entry.key.toLowerCase() == normalizedCity.toLowerCase(),
+            orElse: () => const MapEntry('', <double>[]),
+          )
+          .value;
+      if (coords.isEmpty) throw Exception('No coordinates for $city');
 
       final response = await _dio.get(
         'https://api.open-meteo.com/v1/forecast',

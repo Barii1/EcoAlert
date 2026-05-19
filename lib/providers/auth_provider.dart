@@ -110,6 +110,8 @@ class AuthProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    debugPrint('[AuthProvider] Firebase login start: ${email.trim()}');
+
     if (_firebaseAuthService == null) {
       _isLoading = false;
       _errorMessage = 'Firebase auth is not initialized.';
@@ -139,10 +141,12 @@ class AuthProvider extends ChangeNotifier {
       _errorMessage = null;
       onFirebaseLoginSuccess?.call();
     } on FirebaseAuthException catch (e) {
+      debugPrint('[AuthProvider] Firebase login error: ${e.code} ${e.message}');
       _isAuthenticated = false;
       _errorMessage = e.message ?? 'Login failed. Please try again.';
       rethrow;
     } catch (e) {
+      debugPrint('[AuthProvider] Firebase login error: $e');
       _isAuthenticated = false;
       _errorMessage = 'Login failed: $e';
       rethrow;
@@ -222,6 +226,8 @@ class AuthProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    debugPrint('[AuthProvider] Demo login start: ${email.trim()}');
+
     try {
       final result = await _authService.signIn(email, password);
 
@@ -241,6 +247,7 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
+      debugPrint('[AuthProvider] Demo login error: $e');
       _errorMessage = 'Login failed: $e';
       _isLoading = false;
       notifyListeners();
