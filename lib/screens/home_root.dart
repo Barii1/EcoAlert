@@ -260,7 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(width: 8),
 
-          // Model status shortcut (visible to all — for FYP demo)
+          // Model status shortcut
           IconButton(
             icon: const Icon(Icons.monitor_heart_rounded,
                 color: AppColors.info, size: 20),

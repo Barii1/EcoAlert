@@ -76,28 +76,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      if (authProvider.isUsingFirebase) {
-        await authProvider.firebaseLogin(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
-        );
-      } else {
-        final success = await authProvider.login(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
-        );
-        if (!success) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(authProvider.errorMessage ?? 'Login failed. Please try again.'),
-              backgroundColor: Colors.red,
-              behavior: SnackBarBehavior.floating,
+      if (!authProvider.isUsingFirebase) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Firebase is not configured. Add google-services.json and rebuild the app.',
             ),
-          );
-          return;
-        }
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
       }
+
+      await authProvider.firebaseLogin(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
 
       if (!mounted) return;
       if (authProvider.isAdmin) {
@@ -141,7 +137,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!authProvider.isUsingFirebase) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Google sign-in requires Firebase setup. Use email login in demo mode.'),
+          content: Text(
+            'Google sign-in requires Firebase. Check google-services.json and SHA fingerprints.',
+          ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -191,6 +189,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _BrandHeader(accent: widget.accent, authProvider: authProvider),
+                  if (!authProvider.isUsingFirebase) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.4)),
+                      ),
+                      child: const Text(
+                        'Firebase failed to initialize. Check google-services.json, '
+                        'firebase_options.dart, and your network connection.',
+                        style: TextStyle(color: Colors.redAccent, fontSize: 12, height: 1.4),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 40),
                   const Text(
                     'Sign in',
@@ -398,58 +413,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-
-                        // ── TEST / DEMO button (visible for FYP demo) ──────
-                        GestureDetector(
-                          onTap: () => Navigator.pushReplacementNamed(context, '/admin'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1A1A00),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0x55FFAA00)),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.science_rounded, color: Color(0xFFFFAA00), size: 16),
-                                SizedBox(width: 8),
-                                Text(
-                                  'TEST  —  Skip login (FYP demo)',
-                                  style: TextStyle(
-                                    color: Color(0xFFFFAA00),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                         const SizedBox(height: 20),
-                        Center(
-                          child: TextButton(
-                            onPressed: () {
-                              Navigator.pushReplacementNamed(context, '/navigation');
-                            },
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text(
-                              'developers bypass',
-                              style: TextStyle(
-                                color: Color(0x22FFFFFF),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w300,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ),
                         const Center(
                           child: Text(
                             'V 4.2.1 · STATION #ECO-2046',

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../config/app_config.dart';
 import '../config/city_mappings.dart';
 import '../models/flood_model.dart';
-import 'demo_weather_source.dart'; // for WeatherDataSource abstract
+import 'weather_data_source.dart';
 
 /// Real weather data source using OpenWeatherMap API.
 class OpenWeatherSource implements WeatherDataSource {

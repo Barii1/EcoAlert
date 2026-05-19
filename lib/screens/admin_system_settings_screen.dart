@@ -444,7 +444,7 @@ class _AdminSystemSettingsScreenState extends State<AdminSystemSettingsScreen> {
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Settings saved (Demo)'),
+                              content: Text('Settings saved'),
                               backgroundColor: Color(0xFF06e0e0),
                             ),
                           );

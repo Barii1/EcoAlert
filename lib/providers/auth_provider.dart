@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
-import '../services/auth_service.dart';
-import '../services/demo_auth_service.dart';
 import '../services/firebase_auth_service.dart';
 import '../firebase_options.dart';
 
 class AuthProvider extends ChangeNotifier {
-  late final AuthService _authService;
   FirebaseAuthService? _firebaseAuthService;
   bool _isFirebaseUser = false;
   bool get isFirebaseUser => _isFirebaseUser;
@@ -17,10 +13,9 @@ class AuthProvider extends ChangeNotifier {
   final bool _useFirebase;
 
   /// Optional callback invoked after successful Firebase login or sign-up.
-  /// Used by main.dart to start Firestore streams (avoids circular imports).
   void Function()? onFirebaseLoginSuccess;
 
-  /// Optional callback after Firebase sign-out or switching to demo mode.
+  /// Optional callback after Firebase sign-out.
   void Function()? onFirebaseLogoutSuccess;
 
   UserModel? _currentUser;
@@ -31,13 +26,11 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider({bool? useFirebase})
       : _useFirebase = useFirebase ?? DefaultFirebaseOptions.isConfigured {
-    _authService = DemoAuthService();
     if (_useFirebase) {
       _firebaseAuthService = FirebaseAuthService();
     }
   }
 
-  // ── Getters ──
   UserModel? get currentUser => _currentUser;
   bool get isAuthenticated => _isAuthenticated;
   bool get isLoading => _isLoading;
@@ -75,8 +68,6 @@ class AuthProvider extends ChangeNotifier {
     );
   }
 
-  /// Clears all in-app auth state (demo or Firebase-backed). Does not call
-  /// [FirebaseAuth.signOut]; use when Firebase already has no user.
   void _clearLocalAuthState() {
     _isFirebaseUser = false;
     _firestoreProfile = null;
@@ -85,9 +76,6 @@ class AuthProvider extends ChangeNotifier {
     _hasShownUpgradePrompt = false;
   }
 
-  /// Call this on app startup. Restores session **only** when
-  /// [FirebaseAuth.instance.currentUser] is non-null; otherwise clears any
-  /// stale in-memory session (e.g. demo) so it cannot survive without a token.
   Future<void> initAuth() async {
     if (_firebaseAuthService == null) return;
     final User? firebaseUser = FirebaseAuth.instance.currentUser;
@@ -104,17 +92,15 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Real Firebase login. Throws on failure so UI can show error.
   Future<void> firebaseLogin(String email, String password) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    debugPrint('[AuthProvider] Firebase login start: ${email.trim()}');
-
     if (_firebaseAuthService == null) {
       _isLoading = false;
-      _errorMessage = 'Firebase auth is not initialized.';
+      _errorMessage =
+          'Firebase is not configured. Check google-services.json and firebase_options.dart.';
       notifyListeners();
       throw FirebaseAuthException(code: 'not-initialized', message: _errorMessage);
     }
@@ -141,12 +127,10 @@ class AuthProvider extends ChangeNotifier {
       _errorMessage = null;
       onFirebaseLoginSuccess?.call();
     } on FirebaseAuthException catch (e) {
-      debugPrint('[AuthProvider] Firebase login error: ${e.code} ${e.message}');
       _isAuthenticated = false;
       _errorMessage = e.message ?? 'Login failed. Please try again.';
       rethrow;
     } catch (e) {
-      debugPrint('[AuthProvider] Firebase login error: $e');
       _isAuthenticated = false;
       _errorMessage = 'Login failed: $e';
       rethrow;
@@ -156,7 +140,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Real Firebase sign up. Throws on failure so UI can show error.
   Future<void> firebaseSignUp({
     required String email,
     required String password,
@@ -169,7 +152,7 @@ class AuthProvider extends ChangeNotifier {
     if (_firebaseAuthService == null) {
       throw FirebaseAuthException(
         code: 'not-initialized',
-        message: 'Firebase auth is not initialized.',
+        message: 'Firebase is not configured.',
       );
     }
     final user = await _firebaseAuthService!.signUp(
@@ -184,8 +167,8 @@ class AuthProvider extends ChangeNotifier {
     if (user != null) {
       await user.sendEmailVerification();
       _isFirebaseUser = true;
-      _firestoreProfile = await _firebaseAuthService!
-          .getUserProfile(user.uid);
+      _firestoreProfile =
+          await _firebaseAuthService!.getUserProfile(user.uid);
       _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
       _isAuthenticated = true;
       notifyListeners();
@@ -193,66 +176,24 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Signs out Firebase and clears all local auth state (including demo).
   Future<void> firebaseLogout() async {
-    if (_firebaseAuthService == null) return;
-    await _firebaseAuthService!.signOut();
+    try {
+      if (_firebaseAuthService != null) {
+        await _firebaseAuthService!.signOut();
+      } else {
+        await FirebaseAuth.instance.signOut();
+      }
+    } catch (_) {
+      // Still clear local session if network/sign-out fails.
+    }
     _clearLocalAuthState();
     notifyListeners();
     onFirebaseLogoutSuccess?.call();
   }
 
-  /// Restores session only when [FirebaseAuth.instance.currentUser] exists.
   Future<void> tryAutoLogin() async {
     if (!_useFirebase) return;
     await initAuth();
-  }
-
-  /// Ends any Firebase session before entering demo mode so a real token
-  /// cannot coexist with demo-only [UserModel] state.
-  Future<void> _signOutFirebaseForDemoSwitch() async {
-    if (_firebaseAuthService == null) return;
-    try {
-      await _firebaseAuthService!.signOut();
-    } catch (_) {}
-  }
-
-  // ══════════════════════════════════════════════
-  //  REAL AUTH (via AuthService)
-  // ══════════════════════════════════════════════
-
-  Future<bool> login(String email, String password) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    debugPrint('[AuthProvider] Demo login start: ${email.trim()}');
-
-    try {
-      final result = await _authService.signIn(email, password);
-
-      if (result.success && result.user != null) {
-        _currentUser = result.user;
-        _isAuthenticated = true;
-        _hasShownUpgradePrompt =
-            _currentUser!.role == UserRole.premium ||
-            _currentUser!.role == UserRole.admin;
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _errorMessage = result.error ?? 'Login failed';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      debugPrint('[AuthProvider] Demo login error: $e');
-      _errorMessage = 'Login failed: $e';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
   }
 
   Future<bool> signup({
@@ -269,44 +210,23 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_useFirebase && _firebaseAuthService != null) {
-        await firebaseSignUp(
-          email: email,
-          password: password,
-          username: username,
-          phoneNumber: phoneNumber,
-          cnicNumber: cnicNumber,
-          province: province,
-          city: city,
-        );
-        _errorMessage = null;
-        return true;
-      }
-
-      if (kDebugMode) {
-        final result = await _authService.signUp(
-          email: email,
-          password: password,
-          username: username,
-          phoneNumber: phoneNumber,
-          cnicNumber: cnicNumber,
-          province: province,
-          city: city,
-        );
-
-        if (result.success && result.user != null) {
-          _currentUser = result.user;
-          _isAuthenticated = true;
-          _errorMessage = null;
-          return true;
-        }
-
-        _errorMessage = result.error ?? 'Signup failed';
+      if (!_useFirebase || _firebaseAuthService == null) {
+        _errorMessage =
+            'Account creation requires Firebase. Check your project configuration.';
         return false;
       }
 
-      _errorMessage = 'Signup is unavailable without Firebase in release mode.';
-      return false;
+      await firebaseSignUp(
+        email: email,
+        password: password,
+        username: username,
+        phoneNumber: phoneNumber,
+        cnicNumber: cnicNumber,
+        province: province,
+        city: city,
+      );
+      _errorMessage = null;
+      return true;
     } on FirebaseAuthException catch (e) {
       _errorMessage = e.message ?? 'Signup failed';
       return false;
@@ -340,7 +260,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Sign in with Google. Returns true if successful.
   Future<bool> signInWithGoogle() async {
     _isLoading = true;
     _errorMessage = null;
@@ -366,7 +285,8 @@ class AuthProvider extends ChangeNotifier {
       _firestoreProfile = await _firebaseAuthService!.getUserProfile(user.uid);
       _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
       _isAuthenticated = true;
-      _hasShownUpgradePrompt = _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
+      _hasShownUpgradePrompt =
+          _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
       _errorMessage = null;
       onFirebaseLoginSuccess?.call();
 
@@ -378,7 +298,7 @@ class AuthProvider extends ChangeNotifier {
       final raw = e.toString();
       if (raw.contains('ApiException: 10')) {
         _errorMessage =
-            'Google Sign-In is not configured for this Android build (ApiException 10). '
+            'Google Sign-In is not configured for this Android build (ApiException: 10). '
             'Add SHA-1/SHA-256 in Firebase, download a fresh google-services.json, and rebuild the app.';
       } else {
         _errorMessage = 'Google sign-in failed: $e';
@@ -391,117 +311,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await _authService.signOut();
-    _currentUser = null;
-    _isAuthenticated = false;
-    _hasShownUpgradePrompt = false;
-    notifyListeners();
-  }
-
-  // ══════════════════════════════════════════════
-  //  DEMO SHORTCUTS (kept for dev/testing)
-  // ══════════════════════════════════════════════
-
-  void upgradeToPremium() {
-    if (_currentUser == null) return;
-    if (_currentUser!.role == UserRole.admin) return;
-    if (_currentUser!.role == UserRole.premium) return;
-    _currentUser = _currentUser!.copyWith(role: UserRole.premium);
-    notifyListeners();
-  }
-
-  Future<void> demoLogin() async {
-    await _signOutFirebaseForDemoSwitch();
-    onFirebaseLogoutSuccess?.call();
-    _isFirebaseUser = false;
-    _firestoreProfile = null;
-    _currentUser = UserModel(
-      id: 'dev',
-      username: 'Developer',
-      email: 'dev@ecoalert.app',
-      phoneNumber: '0000000000',
-      cnicNumber: '00000-0000000-0',
-      province: 'Demo Province',
-      city: 'Lahore',
-      createdAt: DateTime.now(),
-      role: UserRole.registered,
-    );
-    _isAuthenticated = true;
-    _isLoading = false;
-    _errorMessage = null;
-    _hasShownUpgradePrompt = false;
-    notifyListeners();
-  }
-
-  Future<void> demoBasicLogin() => demoLogin();
-
-  Future<void> demoGuestLogin() async {
-    await _signOutFirebaseForDemoSwitch();
-    onFirebaseLogoutSuccess?.call();
-    _isFirebaseUser = false;
-    _firestoreProfile = null;
-    _currentUser = UserModel(
-      id: 'guest',
-      username: 'Guest',
-      email: 'guest@ecoalert.app',
-      phoneNumber: '',
-      cnicNumber: '',
-      province: '',
-      city: 'Lahore',
-      createdAt: DateTime.now(),
-      role: UserRole.general,
-    );
-    _isAuthenticated = true;
-    _isLoading = false;
-    _errorMessage = null;
-    _hasShownUpgradePrompt = false;
-    notifyListeners();
-  }
-
-  Future<void> demoAdminLogin() async {
-    await _signOutFirebaseForDemoSwitch();
-    onFirebaseLogoutSuccess?.call();
-    _isFirebaseUser = false;
-    _firestoreProfile = null;
-    _currentUser = UserModel(
-      id: 'admin',
-      username: 'Admin',
-      email: 'admin@ecoalert.app',
-      phoneNumber: '0000000000',
-      cnicNumber: '00000-0000000-0',
-      province: 'System',
-      city: 'HQ',
-      createdAt: DateTime.now(),
-      role: UserRole.admin,
-    );
-    _isAuthenticated = true;
-    _isLoading = false;
-    _errorMessage = null;
-    _hasShownUpgradePrompt = true;
-    notifyListeners();
-  }
-
-  Future<void> demoPremiumLogin() async {
-    await _signOutFirebaseForDemoSwitch();
-    onFirebaseLogoutSuccess?.call();
-    _isFirebaseUser = false;
-    _firestoreProfile = null;
-    _currentUser = UserModel(
-      id: 'premium',
-      username: 'Premium User',
-      email: 'premium@ecoalert.app',
-      phoneNumber: '0000000000',
-      cnicNumber: '00000-0000000-0',
-      province: 'Punjab',
-      city: 'Lahore',
-      createdAt: DateTime.now(),
-      role: UserRole.premium,
-    );
-    _isAuthenticated = true;
-    _isLoading = false;
-    _errorMessage = null;
-    _hasShownUpgradePrompt = true;
-    notifyListeners();
+    await firebaseLogout();
   }
 
   void clearError() {

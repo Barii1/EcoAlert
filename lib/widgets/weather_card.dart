@@ -258,8 +258,8 @@ class _TemperatureGraph extends StatelessWidget {
   Widget build(BuildContext context) {
     final range = math.max(1.0, high - low);
     final currentPosition = ((current - low) / range).clamp(0.0, 1.0);
-    final lowPosition = 0.0;
-    final highPosition = 1.0;
+    const lowPosition = 0.0;
+    const highPosition = 1.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {

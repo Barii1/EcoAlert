@@ -243,7 +243,7 @@ class _AdminContentManagementScreenState
                               // TODO: Add new article
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Add new article (Demo)'),
+                                  content: Text('Add new article — coming soon'),
                                 ),
                               );
                             },

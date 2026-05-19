@@ -40,7 +40,7 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                     style: AppTextStyles.titleMed.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w700),
                   ),
                   subtitle: Text(
-                    'Receive hazard alerts near your location (demo).',
+                    'Receive hazard alerts near your location.',
                     style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
                   ),
                 ),
@@ -96,19 +96,6 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                   title: Text('Heat', style: AppTextStyles.titleMed.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.bgCard,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.borderSubtle),
-            ),
-            child: Text(
-              'Demo note: settings are local-only and reset on app restart.',
-              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary, height: 1.3),
             ),
           ),
         ],

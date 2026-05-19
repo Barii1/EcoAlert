@@ -3,18 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 import '../models/flood_model.dart';
-import '../services/demo_weather_source.dart';
 import '../services/openweather_weather_source.dart';
-import '../services/fallback_data_source.dart';
+import '../services/weather_data_source.dart';
 import '../services/flood_risk_calculator.dart';
 import '../services/remote_predict_service.dart';
 import '../services/cache_service.dart';
 
 class FloodProvider extends ChangeNotifier {
-  final WeatherDataSource _weatherSource = FallbackWeatherSource(
-    real: OpenWeatherSource(),
-    fallback: DemoWeatherSource(),
-  );
+  final WeatherDataSource _weatherSource = OpenWeatherSource();
   final FloodRiskCalculator _localCalculator = FloodRiskCalculator();
 
   FloodRisk? _risk;
@@ -88,7 +84,7 @@ class FloodProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    // ── Step 1: Fetch rainfall data (OpenWeatherMap → demo fallback) ──────
+    // ── Step 1: Fetch rainfall data from OpenWeatherMap ──────
     try {
       final rainfall = await _weatherSource.fetchRainfall(city);
 

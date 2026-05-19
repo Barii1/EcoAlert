@@ -31,7 +31,7 @@ class ReportProvider extends ChangeNotifier {
 
   int get pendingCount => pendingReports.length;
 
-  /// Local demo baseline (no Firestore subscription).
+  /// Empty baseline when Firestore is not active.
   Future<void> init() async {
     if (_isUsingFirebase) return;
     _reports = [];
@@ -93,7 +93,7 @@ class ReportProvider extends ChangeNotifier {
     );
   }
 
-  /// Stop Firestore and revert to empty demo list.
+  /// Stop Firestore and clear local report list.
   void disposeFirestore() {
     _reportsSubscription?.cancel();
     _reportsSubscription = null;
@@ -183,14 +183,10 @@ class ReportProvider extends ChangeNotifier {
       }
     }
 
-    // Demo mode — persist in memory only (no Firestore).
-    _isLoading = true;
-    notifyListeners();
-    _reports = [..._reports, report];
+    _errorMessage = 'Sign in to submit hazard reports.';
     _isLoading = false;
-    _errorMessage = null;
     notifyListeners();
-    return true;
+    return false;
   }
 
   Future<void> approve(String reportId) async {
@@ -219,16 +215,6 @@ class ReportProvider extends ChangeNotifier {
       }
       return;
     }
-
-    // Demo mode — update local list only.
-    final idx = _reports.indexWhere((r) => r.id == reportId);
-    if (idx == -1) return;
-    _reports = [
-      ..._reports.sublist(0, idx),
-      _reports[idx].copyWith(status: status),
-      ..._reports.sublist(idx + 1),
-    ];
-    notifyListeners();
   }
 
   @override

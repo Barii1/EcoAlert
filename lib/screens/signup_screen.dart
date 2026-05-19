@@ -193,7 +193,9 @@ class _SignupScreenState extends State<SignupScreen> {
     if (!authProvider.isUsingFirebase) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Google sign-up requires Firebase setup. Use email sign-up in demo mode.'),
+          content: Text(
+            'Google sign-up requires Firebase. Check google-services.json and SHA fingerprints.',
+          ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),

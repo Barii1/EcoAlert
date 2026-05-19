@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
@@ -32,6 +31,7 @@ import 'screens/admin_dashboard_screen.dart';
 import 'screens/aqi_detail_screen.dart';
 import 'screens/flood_detail_screen.dart';
 import 'screens/model_status_screen.dart';
+import 'widgets/auth_gate.dart';
 import 'providers/alert_provider.dart';
 import 'providers/aqi_provider.dart';
 import 'providers/flood_provider.dart';
@@ -57,7 +57,7 @@ void main() async {
     firebaseReady = true;
     debugPrint('[EcoAlert] Firebase initialized successfully');
   } catch (e) {
-    debugPrint('[EcoAlert] Firebase init failed, running in demo mode: $e');
+    debugPrint('[EcoAlert] Firebase init failed: $e');
   }
 
   // Load theme preference before app starts
@@ -171,13 +171,13 @@ class EcoAlertApp extends StatelessWidget {
                 },
                 '/terms': (_) => const TermsConditionsScreen(),
                 '/privacy': (_) => const PrivacyPolicyScreen(),
-                '/navigation': (_) => const MainNavigationScreen(),
+                '/navigation': (_) => const AuthGate(child: MainNavigationScreen()),
                 '/alert-detail': (_) => const AlertDetailScreen(),
                 '/alert-settings': (_) => const AlertSettingsScreen(),
                 '/route-info': (_) => const RouteInfoScreen(),
                 '/report-hazard': (_) => const ReportHazardScreen(),
                 '/report-confirmation': (_) => const ReportConfirmationScreen(),
-                '/admin': (_) => const AdminDashboardScreen(),
+                '/admin': (_) => const AdminGate(child: AdminDashboardScreen()),
                 '/aqi-detail': (_) => const AqiDetailScreen(),
                 '/flood-detail': (_) => const FloodDetailScreen(),
                 '/model-status': (_) => const ModelStatusScreen(),
@@ -259,7 +259,7 @@ class EcoAlertApp extends StatelessWidget {
                         : AppColors.borderSubtle),
               ),
             ),
-            themeMode: ThemeMode.dark,
+            themeMode: themeProvider.themeMode,
             home: const SplashScreen(),
           );
         },

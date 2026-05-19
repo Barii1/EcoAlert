@@ -4,17 +4,12 @@ import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 import '../models/aqi_model.dart';
 import '../services/aqi_data_source.dart';
-import '../services/demo_aqi_source.dart';
 import '../services/waqi_aqi_source.dart';
-import '../services/fallback_data_source.dart';
 import '../services/remote_predict_service.dart';
 import '../services/cache_service.dart';
 
 class AqiProvider extends ChangeNotifier {
-  final AqiDataSource _source = FallbackAqiSource(
-    real: WaqiAqiSource(),
-    fallback: DemoAqiSource(),
-  );
+  final AqiDataSource _source = WaqiAqiSource();
 
   AqiReading? _current;
   List<HourlyAqiPoint> _hourly = [];

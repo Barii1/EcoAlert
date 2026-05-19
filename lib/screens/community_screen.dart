@@ -242,7 +242,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                         shape: BoxShape.circle,
                         color: AppColors.border,
                       ),
-                        child: Center(
+                      child: Center(
                         child: Text(
                           post.userName[0],
                           style: AppTextStyles.titleMed.copyWith(
@@ -278,7 +278,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                             ],
                           ),
                           const SizedBox(height: 2),
-                            Row(
+                          Row(
                             children: [
                               Text(
                                 post.timeAgo,
@@ -289,7 +289,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                'G«Û',
+                                'üìç',
                                 style: TextStyle(color: AppColors.textSecondary),
                               ),
                               const SizedBox(width: 4),
