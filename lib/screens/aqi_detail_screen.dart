@@ -6,6 +6,8 @@ import '../models/aqi_model.dart';
 import '../providers/aqi_provider.dart';
 import '../widgets/aqi_gauge.dart';
 import '../widgets/surface_card.dart';
+import '../config/app_colors.dart';
+import '../config/app_text_styles.dart';
 
 class AqiDetailScreen extends StatelessWidget {
   const AqiDetailScreen({super.key});
@@ -29,7 +31,7 @@ class AqiDetailScreen extends StatelessWidget {
     final hourly = context.watch<AqiProvider>().hourly;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: AppColors.bgSecondary,
       appBar: AppBar(
         title: const Text('Air Quality'),
         leading: IconButton(
@@ -44,9 +46,9 @@ class AqiDetailScreen extends StatelessWidget {
           children: [
             Text(
               reading.city,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  ),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 24),
             Center(
@@ -60,10 +62,10 @@ class AqiDetailScreen extends StatelessWidget {
             Center(
               child: Text(
                 reading.categoryLabel,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: reading.color,
-                      fontWeight: FontWeight.w700,
-                    ),
+                style: AppTextStyles.headline.copyWith(
+                  color: reading.color,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -75,7 +77,7 @@ class AqiDetailScreen extends StatelessWidget {
                   Expanded(
                     child: Text(
                       reading.healthAdvice,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: AppTextStyles.body,
                     ),
                   ),
                 ],
@@ -99,14 +101,13 @@ class AqiDetailScreen extends StatelessWidget {
   }
 
   Widget _buildRiskChips(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        _riskChip(context, 'Children', Icons.child_care, colors.error),
-        _riskChip(context, 'Elderly', Icons.elderly, colors.error),
-        _riskChip(context, 'Outdoor Workers', Icons.construction, colors.error),
+        _riskChip(context, 'Children', Icons.child_care, AppColors.danger),
+        _riskChip(context, 'Elderly', Icons.elderly, AppColors.danger),
+        _riskChip(context, 'Outdoor Workers', Icons.construction, AppColors.danger),
       ],
     );
   }
@@ -124,7 +125,10 @@ class AqiDetailScreen extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 6),
-          Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color)),
+          Text(
+            label,
+            style: AppTextStyles.label.copyWith(color: color),
+          ),
         ],
       ),
     );
@@ -137,7 +141,7 @@ class AqiDetailScreen extends StatelessWidget {
         children: [
           Text(
             'Pollutants',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: AppTextStyles.titleMed.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           _pollutantRow(context, 'PM2.5', reading.pm25, 'µg/m³', reading.aqi / 500),
@@ -151,25 +155,32 @@ class AqiDetailScreen extends StatelessWidget {
   }
 
   Widget _pollutantRow(BuildContext context, String name, double value, String unit, double barValue) {
-    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          SizedBox(width: 48, child: Text(name, style: Theme.of(context).textTheme.bodyMedium)),
+          SizedBox(
+            width: 48,
+            child: Text(name, style: AppTextStyles.bodySmall),
+          ),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: barValue.clamp(0.0, 1.0),
-                backgroundColor: colors.surfaceContainerHighest,
-                valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
+                backgroundColor: AppColors.bgCard,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                 minHeight: 8,
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Text('${value.toStringAsFixed(1)} $unit', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            '${value.toStringAsFixed(1)} $unit',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
         ],
       ),
     );
@@ -181,16 +192,13 @@ class AqiDetailScreen extends StatelessWidget {
       spots.add(FlSpot(i.toDouble(), hourly[i].aqi.toDouble()));
     }
 
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
     return SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '24h AQI Trend',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: AppTextStyles.titleMed.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -205,8 +213,8 @@ class AqiDetailScreen extends StatelessWidget {
                       reservedSize: 32,
                       getTitlesWidget: (value, meta) => Text(
                         value.toInt().toString(),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurface.withOpacity(0.5),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecondary.withOpacity(0.5),
                           fontSize: 10,
                         ),
                       ),
@@ -226,8 +234,8 @@ class AqiDetailScreen extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
                             DateFormat('HH').format(hourly[i].hour),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colors.onSurface.withOpacity(0.5),
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary.withOpacity(0.5),
                               fontSize: 10,
                             ),
                           ),
@@ -243,12 +251,12 @@ class AqiDetailScreen extends StatelessWidget {
                   LineChartBarData(
                     spots: spots,
                     isCurved: true,
-                    color: colors.primary,
+                    color: AppColors.primary,
                     barWidth: 2,
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: colors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withOpacity(0.1),
                     ),
                   ),
                 ],
@@ -259,8 +267,8 @@ class AqiDetailScreen extends StatelessWidget {
           Center(
             child: Text(
               'Unhealthy threshold: 100',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onSurface.withOpacity(0.5),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary.withOpacity(0.5),
               ),
             ),
           ),
@@ -297,7 +305,7 @@ class AqiDetailScreen extends StatelessWidget {
         children: [
           Text(
             'Precautions',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: AppTextStyles.titleMed.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           ...bullets.map((b) => Padding(
@@ -305,8 +313,13 @@ class AqiDetailScreen extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('• ', style: Theme.of(context).textTheme.bodyMedium),
-                    Expanded(child: Text(b, style: Theme.of(context).textTheme.bodyMedium)),
+                    Text(
+                      '• ',
+                      style: AppTextStyles.body,
+                    ),
+                    Expanded(
+                      child: Text(b, style: AppTextStyles.body),
+                    ),
                   ],
                 ),
               )),

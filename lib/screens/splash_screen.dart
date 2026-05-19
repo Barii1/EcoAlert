@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import '../config/app_colors.dart';
+import '../config/app_text_styles.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -75,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen>
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -92,24 +94,21 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
               const SizedBox(height: 36),
-              const Text(
+              Text(
                 'ECOALERT',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w200,
+                style: AppTextStyles.displayMed.copyWith(
+                  color: AppColors.textInverse,
                   letterSpacing: 6.5,
-                  fontFamily: 'Sans-serif',
+                  fontWeight: FontWeight.w200,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'predict  ·  prepare  ·  protect',
-                style: TextStyle(
-                  color: Color(0x44ffffff),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w200,
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.textSecondary.withOpacity(0.6),
                   letterSpacing: 2.5,
+                  fontWeight: FontWeight.w200,
                 ),
               ),
               const SizedBox(height: 24),
@@ -124,9 +123,9 @@ class _SplashScreenState extends State<SplashScreen>
                       borderRadius: BorderRadius.circular(2),
                       child: LinearProgressIndicator(
                         value: _loadAnim.value,
-                        backgroundColor: const Color(0x15ffffff),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0x44ffffff),
+                        backgroundColor: AppColors.primary.withOpacity(0.1),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.primary.withOpacity(0.4),
                         ),
                         minHeight: 1,
                       ),
