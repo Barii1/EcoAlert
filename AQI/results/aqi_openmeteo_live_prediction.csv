@@ -1,0 +1,2 @@
+latitude,longitude,timezone,datetime,components_co,components_no2,components_so2,components_o3,components_pm2_5,components_pm10,raw_ammonia,predicted_aqi_class,predicted_aqi_label,prediction_confidence
+31.599998,74.40001,Asia/Karachi,2026-05-11T13:00,338.0,3.6,17.7,212.0,102.0,489.9,,5,Very Poor,1.0

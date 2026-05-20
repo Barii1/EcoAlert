@@ -18,7 +18,7 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 
-from config import (
+from cloudburst.src.config import (
     TRAIN_DATA_PATH,
     MODEL_PATH,
     METADATA_PATH,
@@ -27,7 +27,7 @@ from config import (
     FEATURE_COLS,
     THRESHOLD,
 )
-from utils import standardize_columns, map_target_to_binary, ensure_feature_frame
+from cloudburst.src.utils import standardize_columns, map_target_to_binary, ensure_feature_frame
 
 
 def main():

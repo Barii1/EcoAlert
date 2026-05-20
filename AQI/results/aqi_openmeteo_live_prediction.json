@@ -1,0 +1,18 @@
+[
+  {
+    "latitude":31.599998,
+    "longitude":74.40001,
+    "timezone":"Asia\/Karachi",
+    "datetime":"2026-05-11T13:00",
+    "components_co":338.0,
+    "components_no2":3.6,
+    "components_so2":17.7,
+    "components_o3":212.0,
+    "components_pm2_5":102.0,
+    "components_pm10":489.9,
+    "raw_ammonia":null,
+    "predicted_aqi_class":5,
+    "predicted_aqi_label":"Very Poor",
+    "prediction_confidence":1.0
+  }
+]

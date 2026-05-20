@@ -1,7 +1,7 @@
 import pandas as pd
 
-from config import TEST_DATA_PATH, PREDICTIONS_CSV_PATH
-from utils import load_model_and_metadata, standardize_columns, score_dataframe
+from cloudburst.src.config import TEST_DATA_PATH, PREDICTIONS_CSV_PATH
+from cloudburst.src.utils import load_model_and_metadata, standardize_columns, score_dataframe
 
 
 def main():

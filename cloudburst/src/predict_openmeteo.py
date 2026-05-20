@@ -3,13 +3,13 @@ import requests
 import pandas as pd
 import joblib
 
-from config import (
+from cloudburst.src.config import (
     MODEL_PATH,
     FEATURE_COLS,
     THRESHOLD,
     OPENMETEO_PREDICTIONS_CSV_PATH,
 )
-from utils import get_risk_level
+from cloudburst.src.utils import get_risk_level
 
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 

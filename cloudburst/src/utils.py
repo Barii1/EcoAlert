@@ -6,7 +6,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from config import (
+from cloudburst.src.config import (
     FEATURE_COLS,
     MODEL_PATH,
     METADATA_PATH,
