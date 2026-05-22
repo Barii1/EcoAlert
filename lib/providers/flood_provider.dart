@@ -3,14 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 import '../models/flood_model.dart';
+import '../services/open_meteo_rainfall_source.dart';
 import '../services/openweather_weather_source.dart';
-import '../services/weather_data_source.dart';
 import '../services/flood_risk_calculator.dart';
 import '../services/remote_predict_service.dart';
 import '../services/cache_service.dart';
 
 class FloodProvider extends ChangeNotifier {
-  final WeatherDataSource _weatherSource = OpenWeatherSource();
+  final OpenWeatherSource _openWeather = OpenWeatherSource();
+  final OpenMeteoRainfallSource _openMeteoRain = OpenMeteoRainfallSource();
   final FloodRiskCalculator _localCalculator = FloodRiskCalculator();
 
   FloodRisk? _risk;
@@ -86,7 +87,13 @@ class FloodProvider extends ChangeNotifier {
 
     // ── Step 1: Fetch rainfall data from OpenWeatherMap ──────
     try {
-      final rainfall = await _weatherSource.fetchRainfall(city);
+      RainfallData rainfall;
+      try {
+        rainfall = await _openWeather.fetchRainfall(city);
+      } catch (owmError) {
+        debugPrint('[FloodProvider] OpenWeather failed, using Open-Meteo: $owmError');
+        rainfall = await _openMeteoRain.fetchRainfall(city);
+      }
 
       // ── Step 2: Try the real ML model via Flask ───────────────────────
       FloodRisk result;
@@ -134,7 +141,8 @@ class FloodProvider extends ChangeNotifier {
         _errorMessage = null;
       } else {
         _hasError = true;
-        _errorMessage = 'No internet connection and no cached data available.';
+        _errorMessage =
+            'Could not load flood risk. Pull down to refresh or check your connection.';
       }
     } finally {
       _isLoading = false;

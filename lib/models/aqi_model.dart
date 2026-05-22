@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 enum AqiCategory {
@@ -130,7 +129,6 @@ class AqiReading {
   static DateTime? _dateTimeFromJson(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return value;
-    if (value is Timestamp) return value.toDate();
     if (value is String) return DateTime.tryParse(value);
     return null;
   }

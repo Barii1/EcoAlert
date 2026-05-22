@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 enum FloodRiskLevel { low, moderate, high, critical }
@@ -6,7 +5,6 @@ enum FloodRiskLevel { low, moderate, high, critical }
 DateTime? _floodDateTimeFromJson(dynamic value) {
   if (value == null) return null;
   if (value is DateTime) return value;
-  if (value is Timestamp) return value.toDate();
   if (value is String) return DateTime.tryParse(value);
   return null;
 }

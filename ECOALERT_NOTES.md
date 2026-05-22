@@ -83,10 +83,6 @@
 - **File:** `lib/providers/auth_provider.dart` — error message comment
 - **Fix:** Add correct SHA-1 and SHA-256 fingerprints in Firebase Console → Project Settings → Android App
 
-### 12. iOS Support Disabled
-- **File:** `pubspec.yaml` — `flutter_launcher_icons`
-- **Fix:** Change `ios: false` to `ios: true` and provide required icon sizes
-
 ---
 
 ## 🗺️ API Keys Needed

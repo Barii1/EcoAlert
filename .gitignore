@@ -29,6 +29,7 @@ firestore-debug.log
 # Environment
 .env
 .env.local
+local/test_accounts.local.json
 
 # API keys — never commit
 lib/config/api_keys.dart

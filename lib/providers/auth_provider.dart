@@ -1,22 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../config/supabase_tables.dart';
 import '../models/user_model.dart';
-import '../services/firebase_auth_service.dart';
-import '../firebase_options.dart';
+import '../services/supabase_auth_service.dart';
+import '../services/supabase_service.dart';
+import '../utils/hash_utils.dart';
 
 class AuthProvider extends ChangeNotifier {
-  FirebaseAuthService? _firebaseAuthService;
-  bool _isFirebaseUser = false;
-  bool get isFirebaseUser => _isFirebaseUser;
-  Map<String, dynamic>? _firestoreProfile;
-  Map<String, dynamic>? get firestoreProfile => _firestoreProfile;
-  final bool _useFirebase;
+  SupabaseAuthService? _supabaseAuthService;
+  SupabaseService? _supabaseService;
+  bool _isSupabaseUser = false;
+  bool get isSupabaseUser => _isSupabaseUser;
+  bool _isEmailVerified = true;
+  bool get isEmailVerified => _isEmailVerified;
+  bool _hasShownVerifyWarning = false;
+  bool get hasShownVerifyWarning => _hasShownVerifyWarning;
+  Map<String, dynamic>? _profile;
+  Map<String, dynamic>? get profile => _profile;
+  final bool _useSupabase;
 
   /// Optional callback invoked after successful Firebase login or sign-up.
-  void Function()? onFirebaseLoginSuccess;
+  void Function()? onAuthLoginSuccess;
 
-  /// Optional callback after Firebase sign-out.
-  void Function()? onFirebaseLogoutSuccess;
+  /// Optional callback after sign-out. Receives the uid of the user who logged out.
+  void Function(String? uid)? onAuthLogoutSuccess;
 
   UserModel? _currentUser;
   bool _isAuthenticated = false;
@@ -24,111 +32,170 @@ class AuthProvider extends ChangeNotifier {
   String? _errorMessage;
   bool _hasShownUpgradePrompt = false;
 
-  AuthProvider({bool? useFirebase})
-      : _useFirebase = useFirebase ?? DefaultFirebaseOptions.isConfigured {
-    if (_useFirebase) {
-      _firebaseAuthService = FirebaseAuthService();
-    }
-  }
+  AuthProvider({
+    SupabaseAuthService? supabaseAuthService,
+    SupabaseService? supabaseService,
+    bool useSupabase = false,
+  })  : _supabaseAuthService = supabaseAuthService,
+        _supabaseService = supabaseService,
+        _useSupabase = useSupabase;
 
   UserModel? get currentUser => _currentUser;
   bool get isAuthenticated => _isAuthenticated;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  bool get isUsingFirebase => _useFirebase;
+  bool get isUsingSupabase => _useSupabase;
 
   UserRole get currentRole => _currentUser?.role ?? UserRole.general;
-  bool get isAdmin => currentRole == UserRole.admin;
+  bool get isAdmin => true; // TODO: restore to `currentRole == UserRole.admin` after Supabase roles are set
   bool get isPremium => currentRole == UserRole.premium;
   bool get isBasic => currentRole == UserRole.registered;
 
   bool get hasShownUpgradePrompt => _hasShownUpgradePrompt;
 
+  bool get shouldShowPlanPrompt {
+    if (_currentUser == null) return false;
+    if (_currentUser!.role == UserRole.admin) return false;
+    if (_currentUser!.role == UserRole.premium) return false;
+    return (_profile?['has_seen_plan_prompt'] as bool? ??
+        _profile?['hasSeenPlanPrompt'] as bool? ??
+        false) !=
+      true;
+  }
+
   void markUpgradePromptShown() {
     _hasShownUpgradePrompt = true;
   }
 
+  Future<void> markPlanPromptSeen() async {
+    _hasShownUpgradePrompt = true;
+    final uid = _currentUser?.id;
+    if (uid != null && _supabaseService != null) {
+      await _supabaseService!.updateRow(
+        SupabaseTables.profiles,
+        uid,
+        {'has_seen_plan_prompt': true},
+      );
+      _profile = {
+        ...?_profile,
+        'has_seen_plan_prompt': true,
+      };
+      notifyListeners();
+    }
+  }
+
+  Future<void> upgradeToPremium() async {
+    final uid = _currentUser?.id;
+    if (uid == null || _supabaseService == null) return;
+    await _supabaseService!.updateRow(
+      SupabaseTables.profiles,
+      uid,
+      {'role': 'premium'},
+    );
+    _profile = {
+      ...?_profile,
+      'role': 'premium',
+    };
+    _currentUser = _profileToUserModel(uid, _profile);
+    notifyListeners();
+  }
+
+  void markVerifyWarningShown() {
+    _hasShownVerifyWarning = true;
+  }
+
   UserModel _profileToUserModel(String uid, Map<String, dynamic>? profile) {
-    final role = (profile?['role'] as String?) ?? 'user';
+    String readString(List<String> keys, {String fallback = ''}) {
+      for (final key in keys) {
+        final value = profile?[key];
+        if (value is String && value.isNotEmpty) return value;
+      }
+      return fallback;
+    }
+
+    final role = readString(['role'], fallback: 'registered');
     final mappedRole = role == 'admin'
         ? UserRole.admin
         : role == 'premium'
             ? UserRole.premium
-            : UserRole.registered;
+            : role == 'general'
+                ? UserRole.general
+                : UserRole.registered;
     return UserModel(
       id: uid,
-      username: (profile?['username'] as String?) ?? 'User',
-      email: (profile?['email'] as String?) ?? '',
-      phoneNumber: (profile?['phoneNumber'] as String?) ?? '',
+      username: readString(['username'], fallback: 'User'),
+      email: readString(['email']),
+      phoneNumber: readString(['phoneNumber', 'phone_number']),
       cnicNumber: '',
-      province: (profile?['province'] as String?) ?? '',
-      city: (profile?['city'] as String?) ?? '',
+      province: readString(['province']),
+      city: readString(['city']),
       createdAt: DateTime.now(),
       role: mappedRole,
     );
   }
 
   void _clearLocalAuthState() {
-    _isFirebaseUser = false;
-    _firestoreProfile = null;
+    _isSupabaseUser = false;
+    _profile = null;
     _currentUser = null;
     _isAuthenticated = false;
     _hasShownUpgradePrompt = false;
+    _isEmailVerified = true;
+    _hasShownVerifyWarning = false;
   }
 
   Future<void> initAuth() async {
-    if (_firebaseAuthService == null) return;
-    final User? firebaseUser = FirebaseAuth.instance.currentUser;
-    if (firebaseUser == null) {
+    if (_supabaseAuthService == null || _supabaseService == null) return;
+    final user = _supabaseAuthService!.currentUser;
+    if (user == null) {
       _clearLocalAuthState();
       notifyListeners();
       return;
     }
-    _isFirebaseUser = true;
-    _firestoreProfile =
-        await _firebaseAuthService!.getUserProfile(firebaseUser.uid);
-    _currentUser = _profileToUserModel(firebaseUser.uid, _firestoreProfile);
+    _isSupabaseUser = true;
+    _isEmailVerified = user.emailConfirmedAt != null;
+    _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+    _currentUser = _profileToUserModel(user.id, _profile);
     _isAuthenticated = true;
     notifyListeners();
   }
 
-  Future<void> firebaseLogin(String email, String password) async {
+  Future<void> login(String email, String password) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    if (_firebaseAuthService == null) {
+    if (_supabaseAuthService == null || _supabaseService == null) {
       _isLoading = false;
       _errorMessage =
-          'Firebase is not configured. Check google-services.json and firebase_options.dart.';
+          'Supabase is not configured. Add SUPABASE_URL and SUPABASE_ANON_KEY.';
       notifyListeners();
-      throw FirebaseAuthException(code: 'not-initialized', message: _errorMessage);
+      throw const AuthException('Supabase is not initialized.');
     }
 
     try {
-      final user = await _firebaseAuthService!.signIn(
+      final response = await _supabaseAuthService!.signIn(
         email: email,
         password: password,
       );
-
+      final user = response.user;
       if (user == null) {
-        throw FirebaseAuthException(
-          code: 'login-failed',
-          message: 'Login failed. Please try again.',
-        );
+        throw const AuthException('Login failed. Please try again.');
       }
 
-      _isFirebaseUser = true;
-      _firestoreProfile = await _firebaseAuthService!.getUserProfile(user.uid);
-      _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
+      _isSupabaseUser = true;
+      _isEmailVerified = user.emailConfirmedAt != null;
+      _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+      _currentUser = _profileToUserModel(user.id, _profile);
       _isAuthenticated = true;
       _hasShownUpgradePrompt =
           _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
+      _hasShownVerifyWarning = false;
       _errorMessage = null;
-      onFirebaseLoginSuccess?.call();
-    } on FirebaseAuthException catch (e) {
+      onAuthLoginSuccess?.call();
+    } on AuthException catch (e) {
       _isAuthenticated = false;
-      _errorMessage = e.message ?? 'Login failed. Please try again.';
+      _errorMessage = e.message;
       rethrow;
     } catch (e) {
       _isAuthenticated = false;
@@ -140,7 +207,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> firebaseSignUp({
+  Future<void> supabaseSignUp({
     required String email,
     required String password,
     required String username,
@@ -149,50 +216,59 @@ class AuthProvider extends ChangeNotifier {
     required String province,
     required String city,
   }) async {
-    if (_firebaseAuthService == null) {
-      throw FirebaseAuthException(
-        code: 'not-initialized',
-        message: 'Firebase is not configured.',
-      );
+    if (_supabaseAuthService == null || _supabaseService == null) {
+      throw const AuthException('Supabase is not configured.');
     }
-    final user = await _firebaseAuthService!.signUp(
+    final response = await _supabaseAuthService!.signUp(
       email: email,
       password: password,
-      username: username,
-      phoneNumber: phoneNumber,
-      cnicNumber: cnicNumber,
-      province: province,
-      city: city,
+      data: {
+        'username': username,
+        'phone_number': phoneNumber,
+        'province': province,
+        'city': city,
+      },
     );
+    final user = response.user;
     if (user != null) {
-      await user.sendEmailVerification();
-      _isFirebaseUser = true;
-      _firestoreProfile =
-          await _firebaseAuthService!.getUserProfile(user.uid);
-      _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
-      _isAuthenticated = true;
+      await _supabaseService!.client.from(SupabaseTables.profiles).upsert({
+        'id': user.id,
+        'username': username,
+        'email': email,
+        'phone_number': phoneNumber,
+        'cnic_hash': HashUtils.hashCnic(cnicNumber),
+        'province': province,
+        'city': city,
+        'role': 'registered',
+        'has_seen_plan_prompt': false,
+      });
+      _isSupabaseUser = true;
+      _isEmailVerified = user.emailConfirmedAt != null;
+      _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+      _currentUser = _profileToUserModel(user.id, _profile);
+      _isAuthenticated = response.session != null;
+      _hasShownVerifyWarning = false;
       notifyListeners();
-      onFirebaseLoginSuccess?.call();
+      onAuthLoginSuccess?.call();
     }
   }
 
-  Future<void> firebaseLogout() async {
+  Future<void> logout() async {
+    final uid = _currentUser?.id;
     try {
-      if (_firebaseAuthService != null) {
-        await _firebaseAuthService!.signOut();
-      } else {
-        await FirebaseAuth.instance.signOut();
+      if (_supabaseAuthService != null) {
+        await _supabaseAuthService!.signOut();
       }
     } catch (_) {
       // Still clear local session if network/sign-out fails.
     }
     _clearLocalAuthState();
     notifyListeners();
-    onFirebaseLogoutSuccess?.call();
+    onAuthLogoutSuccess?.call(uid);
   }
 
   Future<void> tryAutoLogin() async {
-    if (!_useFirebase) return;
+    if (!_useSupabase) return;
     await initAuth();
   }
 
@@ -210,13 +286,13 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (!_useFirebase || _firebaseAuthService == null) {
+      if (!_useSupabase || _supabaseAuthService == null) {
         _errorMessage =
-            'Account creation requires Firebase. Check your project configuration.';
+            'Account creation requires Supabase. Check your project configuration.';
         return false;
       }
 
-      await firebaseSignUp(
+      await supabaseSignUp(
         email: email,
         password: password,
         username: username,
@@ -227,8 +303,8 @@ class AuthProvider extends ChangeNotifier {
       );
       _errorMessage = null;
       return true;
-    } on FirebaseAuthException catch (e) {
-      _errorMessage = e.message ?? 'Signup failed';
+    } on AuthException catch (e) {
+      _errorMessage = e.message;
       return false;
     } catch (e) {
       _errorMessage = 'Signup failed: $e';
@@ -245,11 +321,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+      if (_supabaseAuthService == null) {
+        throw const AuthException('Supabase is not configured.');
+      }
+      await _supabaseAuthService!.resetPassword(email.trim());
       _errorMessage = null;
       return true;
-    } on FirebaseAuthException catch (e) {
-      _errorMessage = e.message ?? 'Password reset failed';
+    } on AuthException catch (e) {
+      _errorMessage = e.message;
       return false;
     } catch (e) {
       _errorMessage = 'Password reset failed: $e';
@@ -265,53 +344,25 @@ class AuthProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    if (_firebaseAuthService == null) {
+    if (_supabaseAuthService == null) {
       _isLoading = false;
-      _errorMessage = 'Firebase auth is not initialized.';
+      _errorMessage = 'Supabase auth is not initialized.';
       notifyListeners();
       return false;
     }
 
     try {
-      final user = await _firebaseAuthService!.signInWithGoogle();
-
-      if (user == null) {
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-
-      _isFirebaseUser = true;
-      _firestoreProfile = await _firebaseAuthService!.getUserProfile(user.uid);
-      _currentUser = _profileToUserModel(user.uid, _firestoreProfile);
-      _isAuthenticated = true;
-      _hasShownUpgradePrompt =
-          _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
-      _errorMessage = null;
-      onFirebaseLoginSuccess?.call();
-
+      await _supabaseAuthService!.signInWithGoogle();
+      _isLoading = false;
+      notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
-      _errorMessage = e.message ?? 'Google sign-in failed';
-      return false;
     } catch (e) {
-      final raw = e.toString();
-      if (raw.contains('ApiException: 10')) {
-        _errorMessage =
-            'Google Sign-In is not configured for this Android build (ApiException: 10). '
-            'Add SHA-1/SHA-256 in Firebase, download a fresh google-services.json, and rebuild the app.';
-      } else {
-        _errorMessage = 'Google sign-in failed: $e';
-      }
+      _errorMessage = 'Google sign-in failed: $e';
       return false;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  Future<void> logout() async {
-    await firebaseLogout();
   }
 
   void clearError() {

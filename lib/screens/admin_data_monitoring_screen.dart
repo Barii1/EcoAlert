@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 
@@ -548,8 +548,8 @@ class _AdminDataMonitoringScreenState extends State<AdminDataMonitoringScreen> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) {
         setState(() {
           _logsError = 'Sign in as admin to view logs.';
           _logsLoading = false;
@@ -557,7 +557,7 @@ class _AdminDataMonitoringScreenState extends State<AdminDataMonitoringScreen> {
         return;
       }
 
-      final token = await user.getIdToken();
+      final token = session.accessToken;
       final uri = Uri.parse(
         '${AppConfig.uploadApiBaseUrl}/api/admin/logs?type=$_logType&limit=50',
       );

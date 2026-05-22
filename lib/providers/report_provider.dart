@@ -1,22 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../config/firestore_paths.dart';
+import '../config/supabase_tables.dart';
 import '../models/hazard_report_model.dart';
-import '../services/firestore_service.dart';
+import '../services/supabase_service.dart';
 import '../services/upload_service.dart';
 
 class ReportProvider extends ChangeNotifier {
-  ReportProvider({
-    FirestoreService? firestoreService,
-  }) : _firestoreService = firestoreService;
+  ReportProvider({SupabaseService? supabaseService})
+      : _supabaseService = supabaseService;
 
-  final FirestoreService? _firestoreService;
+  final SupabaseService? _supabaseService;
   StreamSubscription<List<Map<String, dynamic>>>? _reportsSubscription;
-  bool _isUsingFirebase = false;
 
   List<HazardReportModel> _reports = [];
   bool _isLoading = false;
@@ -31,25 +29,19 @@ class ReportProvider extends ChangeNotifier {
 
   int get pendingCount => pendingReports.length;
 
-  /// Empty baseline when Firestore is not active.
-  Future<void> init() async {
-    if (_isUsingFirebase) return;
-    _reports = [];
-    _isLoading = false;
-    _errorMessage = null;
-    notifyListeners();
+  Future<void> init({bool isAdmin = false, String? uid}) async {
+    if (_supabaseService == null) {
+      _reports = [];
+      _isLoading = false;
+      _errorMessage = null;
+      notifyListeners();
+      return;
+    }
+    _startStream(isAdmin: isAdmin, uid: uid);
   }
 
-  /// Call after Firebase login to stream real reports.
-  void initFirestore({required bool isAdmin, String? uid}) {
-    if (_firestoreService == null) return;
-
-    _isUsingFirebase = true;
-    _reportsSubscription?.cancel();
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
+  void _startStream({required bool isAdmin, String? uid}) {
+    if (_supabaseService == null) return;
     if (!isAdmin && (uid == null || uid.isEmpty)) {
       _reports = [];
       _isLoading = false;
@@ -57,53 +49,36 @@ class ReportProvider extends ChangeNotifier {
       return;
     }
 
-    final Stream<List<Map<String, dynamic>>> stream = isAdmin
-        ? _firestoreService!.streamCollection(
-            FirestorePaths.reports,
-            orderBy: 'createdAt',
-            descending: true,
-            limit: 100,
-          )
-        : _firestoreService!.streamCollection(
-            FirestorePaths.reports,
-            whereField: 'reporterUid',
-            whereValue: uid,
-          );
-
-    _reportsSubscription = stream.listen(
-      (data) {
-        var models =
-            data.map((row) => HazardReportModel.fromJson(row)).toList();
-        if (!isAdmin) {
-          models.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          if (models.length > 100) {
-            models = models.sublist(0, 100);
-          }
-        }
-        _reports = models;
-        _isLoading = false;
-        _errorMessage = null;
-        notifyListeners();
-      },
-      onError: (e) {
-        _errorMessage = 'Error streaming reports: $e';
-        _isLoading = false;
-        notifyListeners();
-      },
-    );
-  }
-
-  /// Stop Firestore and clear local report list.
-  void disposeFirestore() {
     _reportsSubscription?.cancel();
-    _reportsSubscription = null;
-    _isUsingFirebase = false;
-    _reports = [];
-    _isLoading = false;
+    _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
+
+    _reportsSubscription = _supabaseService!
+        .streamTable(
+          SupabaseTables.reports,
+          primaryKeys: ['id'],
+          orderBy: 'created_at',
+          descending: true,
+          limit: 100,
+          whereField: isAdmin ? null : 'reporter_uid',
+          whereValue: isAdmin ? null : uid,
+        )
+        .listen(
+          (rows) {
+            _reports = rows.map((r) => HazardReportModel.fromJson(r)).toList();
+            _isLoading = false;
+            _errorMessage = null;
+            notifyListeners();
+          },
+          onError: (e) {
+            _errorMessage = 'Error streaming reports: $e';
+            _isLoading = false;
+            notifyListeners();
+          },
+        );
   }
 
-  /// Submit a new hazard report.
   Future<bool> addReport({
     required String hazardType,
     required String details,
@@ -116,19 +91,20 @@ class ReportProvider extends ChangeNotifier {
     String? mainPollutant,
     double? confidence,
   }) async {
-    String uid = reporterUid;
-    String name = reporterName.isNotEmpty ? reporterName : 'User';
-    if (_isUsingFirebase) {
-      final fbUid = FirebaseAuth.instance.currentUser?.uid;
-      uid = (fbUid != null && fbUid.isNotEmpty) ? fbUid : reporterUid;
-      final fbName = FirebaseAuth.instance.currentUser?.displayName;
-      name = reporterName.isNotEmpty
-          ? reporterName
-          : (fbName != null && fbName.isNotEmpty ? fbName : 'User');
+    if (_supabaseService == null) {
+      _errorMessage = 'Sign in to submit hazard reports.';
+      notifyListeners();
+      return false;
     }
 
+    final supaUser = Supabase.instance.client.auth.currentUser;
+    final uid = (supaUser?.id.isNotEmpty == true) ? supaUser!.id : reporterUid;
+    final name = reporterName.isNotEmpty
+        ? reporterName
+        : (supaUser?.email?.split('@').first ?? 'User');
+
     final report = HazardReportModel(
-      id: 'r-${DateTime.now().millisecondsSinceEpoch}',
+      id: '',
       hazardType: hazardType,
       details: details,
       imageCount: imageCount,
@@ -143,77 +119,66 @@ class ReportProvider extends ChangeNotifier {
       imageUrls: const [],
     );
 
-    if (_isUsingFirebase) {
-      if (_firestoreService == null) return false;
-      try {
-        _isLoading = true;
-        _errorMessage = null;
-        notifyListeners();
-
-        final data = report.toJson()
-          ..remove('id')
-          ..remove('createdAt');
-        final newDocId =
-            await _firestoreService!.addDoc(FirestorePaths.reports, data);
-
-        // Upload images if any were provided
-        if (images != null && images.isNotEmpty) {
-          final urls = await UploadService.uploadReportImages(
-            reportId: newDocId,
-            uid: uid,
-            images: images,
-          );
-          await _firestoreService!.updateDoc(
-            FirestorePaths.reportDoc(newDocId),
-            {
-              'imageUrls': urls,
-              'imageCount': urls.length,
-            },
-          );
-        }
-
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } catch (e) {
-        _errorMessage = 'Failed to submit report: $e';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    }
-
-    _errorMessage = 'Sign in to submit hazard reports.';
-    _isLoading = false;
+    _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
-    return false;
+
+    try {
+      final data = <String, dynamic>{
+        'hazard_type': report.hazardType,
+        'details': report.details,
+        'image_count': report.imageCount,
+        'location_label': report.locationLabel,
+        'status': report.status.name,
+        'aqi': report.aqi,
+        'main_pollutant': report.mainPollutant,
+        'confidence': report.confidence,
+        'reporter_uid': report.reporterUid,
+        'reporter_name': report.reporterName,
+        'image_urls': <String>[],
+      };
+
+      final newId = await _supabaseService!.insertRow(SupabaseTables.reports, data);
+
+      if (images != null && images.isNotEmpty) {
+        final urls = await UploadService.uploadReportImages(
+          reportId: newId,
+          uid: uid,
+          images: images,
+        );
+        await _supabaseService!.updateRow(
+          SupabaseTables.reports,
+          newId,
+          {'image_urls': urls, 'image_count': urls.length},
+        );
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to submit report: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 
-  Future<void> approve(String reportId) async {
-    await _setStatus(reportId, ReportStatus.approved);
-  }
-
-  Future<void> reject(String reportId) async {
-    await _setStatus(reportId, ReportStatus.rejected);
-  }
-
-  Future<void> resolve(String reportId) async {
-    await _setStatus(reportId, ReportStatus.resolved);
-  }
+  Future<void> approve(String reportId) => _setStatus(reportId, ReportStatus.approved);
+  Future<void> reject(String reportId) => _setStatus(reportId, ReportStatus.rejected);
+  Future<void> resolve(String reportId) => _setStatus(reportId, ReportStatus.resolved);
 
   Future<void> _setStatus(String reportId, ReportStatus status) async {
-    if (_isUsingFirebase) {
-      if (_firestoreService == null) return;
-      try {
-        await _firestoreService!.updateDoc(
-          FirestorePaths.reportDoc(reportId),
-          {'status': status.name},
-        );
-      } catch (e) {
-        _errorMessage = 'Failed to update report: $e';
-        notifyListeners();
-      }
-      return;
+    if (_supabaseService == null) return;
+    try {
+      await _supabaseService!.updateRow(
+        SupabaseTables.reports,
+        reportId,
+        {'status': status.name},
+      );
+    } catch (e) {
+      _errorMessage = 'Failed to update report: $e';
+      notifyListeners();
     }
   }
 

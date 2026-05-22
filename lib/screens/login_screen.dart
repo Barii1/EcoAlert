@@ -1,5 +1,5 @@
 import 'package:ecoalert/widgets/mountain_logo.dart';
-import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -76,21 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      if (!authProvider.isUsingFirebase) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Firebase is not configured. Add google-services.json and rebuild the app.',
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-
-      await authProvider.firebaseLogin(
+      await authProvider.login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
@@ -103,19 +89,11 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         Navigator.pushReplacementNamed(context, '/navigation');
       }
-    } on FirebaseAuthException catch (e) {
-      String message = 'Login failed. Please try again.';
-      if (e.code == 'user-not-found') {
-        message = 'No account found with this email.';
-      } else if (e.code == 'wrong-password') {
-        message = 'Incorrect password.';
-      } else if (e.code == 'invalid-email') {
-        message = 'Invalid email address.';
-      }
+    } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Text(e.message),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -134,19 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleGoogleLogin() async {
     final authProvider = context.read<AuthProvider>();
-    if (!authProvider.isUsingFirebase) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Google sign-in requires Firebase. Check google-services.json and SHA fingerprints.',
-          ),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
     final success = await authProvider.signInWithGoogle();
     if (!mounted) return;
 
@@ -189,23 +154,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _BrandHeader(accent: widget.accent, authProvider: authProvider),
-                  if (!authProvider.isUsingFirebase) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.4)),
-                      ),
-                      child: const Text(
-                        'Firebase failed to initialize. Check google-services.json, '
-                        'firebase_options.dart, and your network connection.',
-                        style: TextStyle(color: Colors.redAccent, fontSize: 12, height: 1.4),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 40),
                   const Text(
                     'Sign in',

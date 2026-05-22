@@ -40,10 +40,13 @@ class WeatherCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _ChipLabel(label: weather.city.toUpperCase()),
-              _ChipLabel(label: 'NOW'),
+              Flexible(
+                child: _ChipLabel(
+                    label: weather.city.split(',').first.toUpperCase()),
+              ),
+              const SizedBox(width: 8),
+              const _ChipLabel(label: 'NOW'),
             ],
           ),
           const SizedBox(height: 16),
@@ -92,6 +95,8 @@ class WeatherCard extends StatelessWidget {
                         letterSpacing: 1.2,
                         fontFamily: 'Roboto',
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(

@@ -6,6 +6,7 @@ class FirestorePaths {
   static const String environmentalSnapshots = 'environmental_snapshots';
   static const String communityPosts = 'community_posts';
   static const String adminLogs = 'admin_logs';
+  static const String hazardZones = 'hazard_zones';
 
   /// Legacy / auxiliary collections (FCM, settings, cached env data).
   static const String aqiReadings = 'aqi_readings';

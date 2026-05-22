@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class AlertModel {
   final String id;
   final String title;
@@ -22,22 +20,29 @@ class AlertModel {
   });
 
   factory AlertModel.fromJson(Map<String, dynamic> json) {
+    String readString(List<String> keys, {String fallback = ''}) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value is String && value.isNotEmpty) return value;
+      }
+      return fallback;
+    }
+
     return AlertModel(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      severity: json['severity'] as String,
-      location: json['location'] as String,
-      timestamp: _timestampFromJson(json['timestamp']),
-      type: json['type'] as String,
-      actionText: json['actionText'] as String,
+      id: readString(['id']),
+      title: readString(['title']),
+      description: readString(['description']),
+      severity: readString(['severity']),
+      location: readString(['location']),
+      timestamp: _timestampFromJson(json['timestamp'] ?? json['created_at']),
+      type: readString(['type']),
+      actionText: readString(['actionText', 'action_text']),
     );
   }
 
   static DateTime _timestampFromJson(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is DateTime) return value;
-    if (value is Timestamp) return value.toDate();
     if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
     return DateTime.now();
   }

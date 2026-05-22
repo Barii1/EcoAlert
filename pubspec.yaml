@@ -10,14 +10,13 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # Firebase
+  # Firebase — keep core + messaging for FCM push only
   firebase_core: ^2.24.2
-  firebase_auth: ^4.16.0
-  cloud_firestore: ^4.15.0
   firebase_messaging: ^14.7.10
-  google_sign_in: ^6.2.0
-  # firebase_analytics: ^10.8.0      # Enable when needed
   flutter_local_notifications: ^17.0.0
+
+  # Supabase — Auth, DB, Storage, Realtime
+  supabase_flutter: ^2.5.0
   
   # State Management
   provider: ^6.1.1
@@ -61,7 +60,6 @@ dev_dependencies:
   image: ^4.0.17
 flutter_launcher_icons:
   android: true
-  ios: false
   image_path: "assets/icons/app_icon.png"
   adaptive_icon_foreground: "assets/icons/app_icon.png"
   adaptive_icon_background: "#000000"

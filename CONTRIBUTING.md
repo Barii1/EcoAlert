@@ -34,7 +34,7 @@ EcoAlert is an AI-powered environmental hazard prediction and alert system for P
 ### Testing
 - **Do** test alert provider changes
 - **Do** verify Firebase connectivity before release
-- **Do** test on Android and iOS before merging
+- **Do** test on Android before merging
 - **Do** check push notification delivery
 
 ### Git Workflow
@@ -123,7 +123,7 @@ EcoAlert is an AI-powered environmental hazard prediction and alert system for P
 2. Create provider in `lib/providers/`
 3. Create screen in `lib/screens/`
 4. Add route to `lib/main.dart`
-5. Test on both Android and iOS
+5. Test on Android
 
 ### Integrating a New Data Source
 1. Create service in `lib/services/`
@@ -152,7 +152,7 @@ flutter pub get
 # Configure Firebase
 # 1. Download google-services.json from Firebase Console
 # 2. Place in android/app/
-# 3. Ensure ios/Podfile is configured
+# 3. Ensure Android setup is configured
 
 # Run app
 flutter run -d <device-id>

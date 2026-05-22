@@ -21,8 +21,6 @@ Work **one item at a time**. Mark ✅ only when tested on a real device or emula
 |---|------|--------|-------|
 | 2.1 | Google Sign-In SHA fingerprints | ⬜ Pending | ApiException 10 on Android |
 | 2.2 | Email/password login E2E test | ⬜ Pending | Sign up → verify → home |
-| 2.3 | iOS Firebase (`firebase_options.dart`) | ⬜ Pending | Add iOS app in Firebase Console |
-| 2.4 | Android release signing | ⬜ Pending | Play Store keystore |
 
 ---
 

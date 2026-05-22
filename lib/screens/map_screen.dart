@@ -6,16 +6,14 @@ import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
 import '../models/flood_model.dart';
-import '../models/user_model.dart';
-import '../providers/auth_provider.dart';
+import '../models/hazard_zone_model.dart';
 import '../providers/aqi_provider.dart';
-import '../providers/connectivity_provider.dart';
 import '../providers/flood_provider.dart';
+import '../providers/hazard_zone_provider.dart';
 import '../providers/location_provider.dart';
 import '../widgets/app_card.dart';
 import '../widgets/map_heatmap_layer.dart';
 import '../widgets/map_legend.dart';
-import '../widgets/premium_ux.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -31,46 +29,21 @@ class _MapScreenState extends State<MapScreen> {
 
   static final LatLng _lahore = LatLng(31.5204, 74.3587);
 
-  // ── Known at-risk zones per city, driven by model output ─────────────────
-  // Each entry: (lat, lon, radius_m, zone_name, zone_type)
-  // Zone types: 'cloudburst', 'aqi', 'flood'
-  static const _lahoreZones = [
-    (31.5700, 74.2850, 1200.0, 'Ravi River Corridor',    'flood'),
-    (31.5880, 74.3110, 900.0,  'Shahdara Township',       'flood'),
-    (31.5590, 74.3130, 700.0,  'Data Darbar / Old City',  'flood'),
-    (31.5230, 74.2780, 800.0,  'Gulshan Ravi Low Lying',  'flood'),
-    (31.5040, 74.3450, 1000.0, 'Youhanabad Drain Area',   'flood'),
-    (31.5204, 74.3587, 1500.0, 'City Centre (AQI)',        'aqi'),
-    (31.4680, 74.2730, 900.0,  'Sundar Industrial Zone',  'aqi'),
-  ];
+  bool get _isAqiMode => _heatmapMode == HeatmapMode.aqi;
 
-  static const _karachiZones = [
-    (24.8700, 67.0200, 1100.0, 'Lyari River Corridor',   'flood'),
-    (24.9300, 66.9900, 1000.0, 'Orangi Town',             'flood'),
-    (24.8300, 67.1000, 800.0,  'Korangi Industrial',      'aqi'),
-    (24.8607, 67.0011, 1400.0, 'Karachi City AQI Zone',   'aqi'),
-  ];
+  List<HazardZoneModel> _activeZones(
+    HazardZoneProvider zones,
+  ) {
+    return zones.zonesForType(_isAqiMode ? 'aqi' : 'flood');
+  }
 
-  static const _islamabadZones = [
-    (33.6800, 73.0500, 900.0,  'Soan River Area',         'flood'),
-    (33.7200, 73.0300, 700.0,  'Margalla Foothills',      'flood'),
-    (33.7294, 73.0931, 1200.0, 'Islamabad AQI Centre',    'aqi'),
-  ];
-
-  static const _peshawarZones = [
-    (34.0200, 71.5100, 1100.0, 'Kabul River Banks',       'flood'),
-    (34.0100, 71.5600, 800.0,  'Charsadda Road Area',     'flood'),
-    (34.0151, 71.5249, 1300.0, 'Peshawar AQI Zone',       'aqi'),
-  ];
-
-  /// Returns zone data for the current city.
-  List<(double, double, double, String, String)> _zonesForCity(String city) {
-    switch (city.toLowerCase()) {
-      case 'karachi':   return _karachiZones;
-      case 'islamabad': return _islamabadZones;
-      case 'peshawar':  return _peshawarZones;
-      default:          return _lahoreZones; // lahore + all others
-    }
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LocationProvider>().getCurrentLocation();
+    });
   }
 
   /// Converts FloodRiskLevel → zone fill color.
@@ -97,27 +70,28 @@ class _MapScreenState extends State<MapScreen> {
     LatLng userPoint,
     FloodProvider floodProvider,
     AqiProvider aqiProvider,
-    String city,
+    HazardZoneProvider zones,
   ) {
     final circles = <CircleMarker>[];
-    final floodLevel  = floodProvider.risk?.level ?? FloodRiskLevel.low;
-    final aqiVal      = aqiProvider.current?.aqi ?? 0;
-    final floodColor  = _floodZoneColor(floodLevel);
-    final aqiColor    = _aqiZoneColor(aqiVal);
+    final floodLevel = floodProvider.risk?.level ?? FloodRiskLevel.low;
+    final cityAqi = aqiProvider.current?.aqi ?? 50;
 
-    for (final z in _zonesForCity(city)) {
-      final point  = LatLng(z.$1, z.$2);
-      final radius = z.$3;
-      final type   = z.$5;
-      final color  = type == 'aqi' ? aqiColor : floodColor;
+    for (final z in _activeZones(zones)) {
+      final point = LatLng(z.latitude, z.longitude);
+      final radius = z.radiusMeters;
+      final zoneAqi = _zoneAqi(z.name, cityAqi);
+      final floodScore = _zoneFloodScore(z.name, floodLevel);
+      final color = _isAqiMode
+          ? _aqiZoneColor(zoneAqi)
+          : _floodZoneColor(_scoreToLevel(floodScore));
 
       circles.add(CircleMarker(
         point: point,
         radius: radius,
         useRadiusInMeter: true,
-        color: color.withOpacity(0.18),
-        borderStrokeWidth: 2,
-        borderColor: color.withOpacity(0.7),
+        color: color.withOpacity(0.22),
+        borderStrokeWidth: 2.5,
+        borderColor: color.withOpacity(0.85),
       ));
     }
 
@@ -135,41 +109,66 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   /// Builds tap-to-alert markers at each zone centre.
+  FloodRiskLevel _scoreToLevel(double score) {
+    if (score >= 80) return FloodRiskLevel.critical;
+    if (score >= 60) return FloodRiskLevel.high;
+    if (score >= 35) return FloodRiskLevel.moderate;
+    return FloodRiskLevel.low;
+  }
+
   List<Marker> _buildZoneMarkers(
-    String city,
     FloodProvider floodProvider,
     AqiProvider aqiProvider,
+    HazardZoneProvider zones,
     BuildContext ctx,
   ) {
     final markers = <Marker>[];
     final floodLevel = floodProvider.risk?.level ?? FloodRiskLevel.low;
-    final aqiVal     = aqiProvider.current?.aqi ?? 0;
+    final cityAqi = aqiProvider.current?.aqi ?? 50;
+    final zoneType = _isAqiMode ? 'aqi' : 'flood';
 
-    for (final z in _zonesForCity(city)) {
-      final point    = LatLng(z.$1, z.$2);
-      final name     = z.$4;
-      final type     = z.$5;
-      final color    = type == 'aqi' ? _aqiZoneColor(aqiVal) : _floodZoneColor(floodLevel);
-      final isHighRisk = type == 'aqi'
-          ? aqiVal > 100
-          : floodLevel == FloodRiskLevel.high || floodLevel == FloodRiskLevel.critical;
+    for (final z in _activeZones(zones)) {
+      final point = LatLng(z.latitude, z.longitude);
+      final name = z.name;
+      final zoneAqi = _zoneAqi(name, cityAqi);
+      final floodScore = _zoneFloodScore(name, floodLevel);
+      final color = _isAqiMode
+          ? _aqiZoneColor(zoneAqi)
+          : _floodZoneColor(_scoreToLevel(floodScore));
+      final isHighRisk = _isAqiMode
+          ? zoneAqi > 100
+          : floodScore >= 60;
 
       markers.add(Marker(
         point: point,
-        width: 36,
-        height: 36,
+        width: 40,
+        height: 40,
         child: GestureDetector(
-          onTap: () => _showZoneAlert(ctx, name, type, floodLevel, aqiVal, color, isHighRisk),
+          onTap: () => _showZoneAlert(
+            ctx,
+            name,
+            zoneType,
+            _isAqiMode ? floodLevel : _scoreToLevel(floodScore),
+            zoneAqi,
+            color,
+            isHighRisk,
+          ),
           child: Container(
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withOpacity(0.2),
               shape: BoxShape.circle,
-              border: Border.all(color: color, width: 2),
+              border: Border.all(color: color, width: 2.5),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.35),
+                  blurRadius: 10,
+                ),
+              ],
             ),
             child: Icon(
-              type == 'aqi' ? Icons.air_rounded : Icons.water_rounded,
+              _isAqiMode ? Icons.air_rounded : Icons.water_drop_rounded,
               color: color,
-              size: 16,
+              size: 18,
             ),
           ),
         ),
@@ -362,27 +361,23 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  int _zoneAqi(String zoneName, int cityAqi) {
+    final spread = zoneName.hashCode.abs() % 90;
+    return (cityAqi - 25 + spread).clamp(25, 320);
+  }
+
+  double _zoneFloodScore(String zoneName, FloodRiskLevel level) {
+    final base = switch (level) {
+      FloodRiskLevel.low => 22.0,
+      FloodRiskLevel.moderate => 48.0,
+      FloodRiskLevel.high => 72.0,
+      FloodRiskLevel.critical => 92.0,
+    };
+    final jitter = (zoneName.hashCode.abs() % 18) - 9;
+    return (base + jitter).clamp(8, 98);
+  }
+
   Future<void> _goToUserLocation() async {
-    final role = context.read<AuthProvider>().currentRole;
-    if (role == UserRole.general) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please sign in to enable location.'),
-          ),
-        );
-      }
-      return;
-    }
-    if (role != UserRole.premium) {
-      if (mounted) {
-        showPremiumFeatureDialog(
-          context,
-          featureName: 'Live GPS location & geo-based warnings',
-        );
-      }
-      return;
-    }
     final loc = context.read<LocationProvider>();
     await loc.getCurrentLocation();
     final pos = loc.currentPosition;
@@ -396,14 +391,11 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final role = context.watch<AuthProvider>().currentRole;
     final aqiProvider = context.watch<AqiProvider>();
     final floodProvider = context.watch<FloodProvider>();
-    final authProvider = context.watch<AuthProvider>();
-    final city = authProvider.currentUser?.city ?? 'Lahore';
-    final isGeneral = role == UserRole.general;
-    final isPremium = role == UserRole.premium;
+    final zoneProvider = context.watch<HazardZoneProvider>();
     final locPos = context.watch<LocationProvider>().currentPosition;
+    final locationLabel = context.watch<LocationProvider>().currentArea;
     final userPoint =
         locPos != null ? LatLng(locPos.latitude, locPos.longitude) : _lahore;
     final isHeatmapLoading = _heatmapMode == HeatmapMode.aqi
@@ -411,9 +403,10 @@ class _MapScreenState extends State<MapScreen> {
       : floodProvider.isLoading;
     final floodLevel = floodProvider.risk?.level ?? FloodRiskLevel.low;
     final aqiVal = aqiProvider.current?.aqi ?? 0;
-    final showAlert = floodLevel == FloodRiskLevel.high ||
-        floodLevel == FloodRiskLevel.critical ||
-        aqiVal > 150;
+    final showAlert = _isAqiMode
+        ? aqiVal > 100
+        : floodLevel == FloodRiskLevel.high ||
+            floodLevel == FloodRiskLevel.critical;
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -438,41 +431,77 @@ class _MapScreenState extends State<MapScreen> {
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 260),
                     child: MapHeatmapLayer(
-                      key: ValueKey(_heatmapMode),
+                      key: ValueKey('${_heatmapMode.name}-${zoneProvider.allZones.length}'),
                       mode: _heatmapMode,
+                      zones: zoneProvider.allZones,
                     ),
                   ),
                 ),
               // ── Model-driven hazard zones ──────────────────────────────
               CircleLayer(
                 circles: _buildHazardCircles(
-                    userPoint, floodProvider, aqiProvider, city),
+                    userPoint, floodProvider, aqiProvider, zoneProvider),
               ),
               // ── Tappable zone markers ──────────────────────────────────
               MarkerLayer(
                 markers: [
-                  ..._buildZoneMarkers(city, floodProvider, aqiProvider, context),
+                  ..._buildZoneMarkers(
+                      floodProvider, aqiProvider, zoneProvider, context),
                   // User location marker
-                  if (isPremium && !isGeneral)
+                  if (locPos != null)
                     Marker(
                       point: userPoint,
-                      width: 40,
-                      height: 40,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withOpacity(0.5),
-                              blurRadius: 8,
-                              spreadRadius: 1,
+                      width: 160,
+                      height: 70,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgCard.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.borderSubtle),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.35),
+                                  blurRadius: 8,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: const Icon(Icons.my_location,
-                            color: Colors.white, size: 20),
+                            child: Text(
+                              locationLabel.isNotEmpty
+                                  ? locationLabel
+                                  : 'You are here',
+                              style: AppTextStyles.label.copyWith(
+                                color: AppColors.textPrimary,
+                                fontSize: 9,
+                                letterSpacing: 0.4,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withOpacity(0.5),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(Icons.person_pin_circle,
+                                color: Colors.white, size: 20),
+                          ),
+                        ],
                       ),
                     ),
                 ],
@@ -552,6 +581,13 @@ class _MapScreenState extends State<MapScreen> {
                         child: const Icon(Icons.my_location,
                             color: AppColors.primary, size: 24),
                       ),
+                      const SizedBox(width: 8),
+                      AppCard(
+                        padding: EdgeInsets.zero,
+                        onTap: () => Navigator.pushNamed(context, '/profile'),
+                        child: const Icon(Icons.settings_outlined,
+                            color: AppColors.primary, size: 24),
+                      ),
                     ],
                   ),
                 ],
@@ -577,14 +613,16 @@ class _MapScreenState extends State<MapScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: (aqiVal > 150
-                                  ? AppColors.warning
+                          color: (_isAqiMode
+                                  ? (aqiVal > 150 ? AppColors.warning : AppColors.danger)
                                   : AppColors.danger)
                               .withOpacity(0.12),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: (aqiVal > 150
-                                    ? AppColors.warning
+                            color: (_isAqiMode
+                                    ? (aqiVal > 150
+                                        ? AppColors.warning
+                                        : AppColors.danger)
                                     : AppColors.danger)
                                 .withOpacity(0.5),
                           ),
@@ -593,20 +631,24 @@ class _MapScreenState extends State<MapScreen> {
                           children: [
                             Icon(
                               Icons.warning_amber_rounded,
-                              color: aqiVal > 150
-                                  ? AppColors.warning
+                              color: _isAqiMode
+                                  ? (aqiVal > 150
+                                      ? AppColors.warning
+                                      : AppColors.danger)
                                   : AppColors.danger,
                               size: 20,
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                aqiVal > 150
-                                    ? '⚠️ AQI $aqiVal — Unhealthy air in your area. Tap zones for details.'
-                                    : '⚠️ ${floodLevel.name.toUpperCase()} cloudburst risk. Tap zones on map for safe areas.',
+                                _isAqiMode
+                                    ? 'AQI $aqiVal — Tap orange/red zones for air quality details.'
+                                    : '${floodLevel.name.toUpperCase()} flood risk — Tap water zones for runoff warnings.',
                                 style: AppTextStyles.bodySmall.copyWith(
-                                  color: aqiVal > 150
-                                      ? AppColors.warning
+                                  color: _isAqiMode
+                                      ? (aqiVal > 150
+                                          ? AppColors.warning
+                                          : AppColors.danger)
                                       : AppColors.danger,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -614,8 +656,10 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                             Icon(Icons.arrow_forward_ios_rounded,
                                 size: 12,
-                                color: aqiVal > 150
-                                    ? AppColors.warning
+                                color: _isAqiMode
+                                    ? (aqiVal > 150
+                                        ? AppColors.warning
+                                        : AppColors.danger)
                                     : AppColors.danger),
                           ],
                         ),
@@ -685,34 +729,60 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildModeSegmentedControl() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.bgSurface.withOpacity(0.84),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _modePill(
-            label: 'AQI',
-            active: _heatmapMode == HeatmapMode.aqi,
-            onTap: () => setState(() => _heatmapMode = HeatmapMode.aqi),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.bgCard.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.borderSubtle),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          _modePill(
-            label: 'Flood Risk',
-            active: _heatmapMode == HeatmapMode.floodRisk,
-            onTap: () => setState(() => _heatmapMode = HeatmapMode.floodRisk),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _modePill(
+                label: 'AQI',
+                icon: Icons.air_rounded,
+                active: _isAqiMode,
+                onTap: () => setState(() => _heatmapMode = HeatmapMode.aqi),
+              ),
+              const SizedBox(width: 6),
+              _modePill(
+                label: 'Flood Risk',
+                icon: Icons.water_drop_rounded,
+                active: !_isAqiMode,
+                onTap: () =>
+                    setState(() => _heatmapMode = HeatmapMode.floodRisk),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _isAqiMode
+              ? 'Showing air quality zones only'
+              : 'Showing flood & cloudburst zones only',
+          style: AppTextStyles.label.copyWith(
+            color: AppColors.textSecondary,
+            fontSize: 10,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _modePill({
     required String label,
+    required IconData icon,
     required bool active,
     required VoidCallback onTap,
   }) {
@@ -734,12 +804,23 @@ class _MapScreenState extends State<MapScreen> {
             color: active ? AppColors.primary : AppColors.borderSubtle,
           ),
         ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: active ? AppColors.textInverse : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppTextStyles.bodySmall.copyWith(
                 color: active ? AppColors.textInverse : AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
               ),
+            ),
+          ],
         ),
         ),
       ),
@@ -747,9 +828,10 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildOfflineIndicator(BuildContext context) {
-    return Consumer<ConnectivityProvider>(
-      builder: (context, connectivity, _) {
-        if (connectivity.isOnline || _offlineBannerDismissed) {
+    return Consumer2<AqiProvider, FloodProvider>(
+      builder: (context, aqi, flood, _) {
+        if (_offlineBannerDismissed ||
+            (!aqi.isFromCache && !flood.isFromCache)) {
           return const SizedBox.shrink();
         }
         return AppCard(
@@ -764,24 +846,27 @@ class _MapScreenState extends State<MapScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Offline Mode',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(color: AppColors.textPrimary),
+                      'Cached map data',
+                      style: AppTextStyles.titleMed.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                      ),
                     ),
                     Text(
-                      'Last updated ${connectivity.lastUpdateLabel}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: AppColors.textSecondary),
+                      'Pull to refresh when back online',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
               TextButton(
-                onPressed: () => connectivity.retryConnection(),
+                onPressed: () {
+                  final city = context.read<LocationProvider>().currentCity;
+                  context.read<AqiProvider>().loadForCity(city);
+                  context.read<FloodProvider>().loadForCity(city);
+                },
                 child: const Text('Retry'),
               ),
               IconButton(

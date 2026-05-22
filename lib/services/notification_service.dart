@@ -2,8 +2,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../config/app_navigator.dart';
-import 'firestore_service.dart';
 
 /// Top-level handler for background FCM messages (must be top-level function).
 @pragma('vm:entry-point')
@@ -82,17 +83,32 @@ class NotificationService {
     }
   }
 
-  /// Save the FCM token to Firestore for server-side targeting.
-  Future<void> saveFcmToken(String uid, FirestoreService firestoreService) async {
+  /// Save the FCM token to Supabase for server-side targeting.
+  Future<void> saveFcmToken(String uid) async {
     if (_fcmToken == null) return;
-    await firestoreService.saveFcmToken(uid, _fcmToken!);
-    debugPrint('[FCM] Token saved for user $uid');
+    try {
+      await Supabase.instance.client.from('fcm_tokens').upsert({
+        'user_id': uid,
+        'token': _fcmToken!,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      debugPrint('[FCM] Token saved for user $uid');
+    } catch (e) {
+      debugPrint('[FCM] Failed to save token: $e');
+    }
   }
 
-  /// Remove the FCM token from Firestore (on logout).
-  Future<void> removeFcmToken(String uid, FirestoreService firestoreService) async {
-    await firestoreService.removeFcmToken(uid);
-    debugPrint('[FCM] Token removed for user $uid');
+  /// Remove the FCM token from Supabase (on logout).
+  Future<void> removeFcmToken(String uid) async {
+    try {
+      await Supabase.instance.client
+          .from('fcm_tokens')
+          .delete()
+          .eq('user_id', uid);
+      debugPrint('[FCM] Token removed for user $uid');
+    } catch (e) {
+      debugPrint('[FCM] Failed to remove token: $e');
+    }
   }
 
   /// Subscribe to a topic (e.g., "flood_lahore", "aqi_lahore").

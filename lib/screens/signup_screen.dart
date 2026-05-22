@@ -190,19 +190,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _handleGoogleSignup() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (!authProvider.isUsingFirebase) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Google sign-up requires Firebase. Check google-services.json and SHA fingerprints.',
-          ),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
     final success = await authProvider.signInWithGoogle();
     if (!mounted) return;
     if (success) {

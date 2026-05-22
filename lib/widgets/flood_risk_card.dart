@@ -130,13 +130,17 @@ class FloodRiskCard extends StatelessWidget {
                     children: [
                       Icon(Icons.grain, size: 16, color: AppColors.textSecondary),
                       const SizedBox(width: 6),
-                      Text(
-                        '${risk.rainfall.mm24h.toStringAsFixed(0)}mm rain today',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                      Expanded(
+                        child: Text(
+                          '${risk.rainfall.mm24h.toStringAsFixed(0)}mm rain today',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Text(
                         'Details →',
                         style: AppTextStyles.label.copyWith(

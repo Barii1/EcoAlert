@@ -108,25 +108,25 @@ class AqiCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(_icon, color: reading.color, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'AIR QUALITY',
-                            style: AppTextStyles.label.copyWith(
-                              color: AppColors.textSecondary,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        reading.city.toUpperCase(),
-                        style: AppTextStyles.label.copyWith(
+                      Icon(_icon, color: reading.color, size: 16),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'AIR QUALITY',
+                        style: TextStyle(
                           color: AppColors.textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        reading.city.split(' ').first.toUpperCase(),
+                        style: TextStyle(
+                          color: reading.color,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 0.8,
                         ),
                       ),

@@ -84,7 +84,8 @@ class AqiProvider extends ChangeNotifier {
         debugPrint('[AqiProvider] Loaded from cache (age: $_cacheAge)');
       } else {
         _hasError = true;
-        _errorMessage = 'No internet connection and no cached data available.';
+        _errorMessage =
+            'Could not load AQI data. Pull down to refresh or check your connection.';
       }
     } finally {
       _isLoading = false;

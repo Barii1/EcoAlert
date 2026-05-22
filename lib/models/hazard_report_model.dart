@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 enum ReportStatus { pending, approved, rejected, resolved }
@@ -41,23 +40,47 @@ class HazardReportModel {
   final List<String> imageUrls;
 
   factory HazardReportModel.fromJson(Map<String, dynamic> json) {
+    String readString(List<String> keys, {String fallback = ''}) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value is String && value.isNotEmpty) return value;
+      }
+      return fallback;
+    }
+
+    int readInt(List<String> keys, {int fallback = 0}) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value is num) return value.toInt();
+      }
+      return fallback;
+    }
+
+    double readDouble(List<String> keys, {double fallback = 0.0}) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value is num) return value.toDouble();
+      }
+      return fallback;
+    }
+
     return HazardReportModel(
-      id: json['id'] as String? ?? '',
-      hazardType: json['hazardType'] as String? ?? '',
-      details: json['details'] as String? ?? '',
-      imageCount: (json['imageCount'] as num?)?.toInt() ?? 0,
-      locationLabel: json['locationLabel'] as String? ?? '',
-      createdAt: _parseDateTime(json['createdAt']),
+      id: readString(['id']),
+      hazardType: readString(['hazardType', 'hazard_type']),
+      details: readString(['details']),
+      imageCount: readInt(['imageCount', 'image_count']),
+      locationLabel: readString(['locationLabel', 'location_label']),
+      createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
       status: ReportStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => ReportStatus.pending,
       ),
-      aqi: (json['aqi'] as num?)?.toInt() ?? 0,
-      mainPollutant: json['mainPollutant'] as String? ?? '',
-      confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
-      reporterUid: json['reporterUid'] as String? ?? '',
-      reporterName: json['reporterName'] as String? ?? '',
-      imageUrls: List<String>.from(json['imageUrls'] ?? []),
+      aqi: readInt(['aqi']),
+      mainPollutant: readString(['mainPollutant', 'main_pollutant']),
+      confidence: readDouble(['confidence']),
+      reporterUid: readString(['reporterUid', 'reporter_uid']),
+      reporterName: readString(['reporterName', 'reporter_name']),
+      imageUrls: List<String>.from(json['imageUrls'] ?? json['image_urls'] ?? []),
     );
   }
 
@@ -105,7 +128,6 @@ class HazardReportModel {
   static DateTime _parseDateTime(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is DateTime) return value;
-    if (value is Timestamp) return value.toDate();
     if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
     return DateTime.now();
   }

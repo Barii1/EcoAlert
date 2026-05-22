@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
 import 'alerts_screen.dart' show AlertItem;
+import '../providers/alert_provider.dart';
+import '../models/alert_model.dart';
 
 class AlertDetailScreen extends StatelessWidget {
   const AlertDetailScreen({super.key});
@@ -10,7 +13,8 @@ class AlertDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
-    final alert = args is AlertItem ? args : _fallbackAlert();
+    final alertProvider = context.watch<AlertProvider>();
+    final alert = _resolveAlert(args, alertProvider.alerts);
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -27,7 +31,9 @@ class AlertDetailScreen extends StatelessWidget {
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: _AlertCard(alert: alert),
+                  child: alert == null
+                      ? _EmptyLiveFeed()
+                      : _AlertCard(alert: alert),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -38,21 +44,48 @@ class AlertDetailScreen extends StatelessWidget {
     );
   }
 
-  AlertItem _fallbackAlert() {
-    return AlertItem(
-      title: 'Flash Flood Warning',
-      subtitle: 'Water levels rising faster than predicted due to sudden cloudburst.',
-      location: 'Johar Town, Block G',
-      timeLabel: 'Live',
-      severityLabel: 'Critical Alert',
-      severityColor: AppColors.danger,
-      icon: Icons.warning,
-      iconColor: AppColors.danger,
-      gradientColor: AppColors.danger,
-      category: 'Flood',
-      description: 'Seek higher ground immediately. Avoid basement areas.',
-      extraStat: '45mm/hr',
-      aqiLabel: '180 Unhealthy',
+  AlertItem? _resolveAlert(Object? args, List<AlertModel> alerts) {
+    if (args is AlertItem) return args;
+    if (alerts.isEmpty) return null;
+    return AlertItem.fromAlertModel(alerts.first);
+  }
+
+}
+
+class _EmptyLiveFeed extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(AppSpacing.radius16),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.rss_feed_rounded,
+              color: AppColors.textDisabled, size: 36),
+          const SizedBox(height: 12),
+          Text(
+            'No live alerts right now',
+            style: AppTextStyles.titleMed.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'When a new alert is issued, it will appear here automatically.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

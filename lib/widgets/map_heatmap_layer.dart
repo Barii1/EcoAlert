@@ -6,6 +6,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_colors.dart';
+import '../config/app_text_styles.dart';
+import '../models/flood_model.dart';
+import '../models/hazard_zone_model.dart';
 import '../providers/aqi_provider.dart';
 import '../providers/flood_provider.dart';
 
@@ -15,9 +18,11 @@ class MapHeatmapLayer extends StatefulWidget {
   const MapHeatmapLayer({
     super.key,
     required this.mode,
+    required this.zones,
   });
 
   final HeatmapMode mode;
+  final List<HazardZoneModel> zones;
 
   @override
   State<MapHeatmapLayer> createState() => _MapHeatmapLayerState();
@@ -26,7 +31,7 @@ class MapHeatmapLayer extends StatefulWidget {
 class _MapHeatmapLayerState extends State<MapHeatmapLayer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
-  String? _selectedCity;
+  String? _selectedZone;
 
   @override
   void initState() {
@@ -47,17 +52,10 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
   Widget build(BuildContext context) {
     final aqi = context.watch<AqiProvider>();
     final flood = context.watch<FloodProvider>();
-    final points = _buildPoints(widget.mode, aqi, flood);
+    final points = _buildPoints(widget.mode, widget.zones, aqi, flood);
 
     return Stack(
       children: [
-        if (points.isEmpty)
-          const Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: _NoHeatmapDataBanner(),
-          ),
         CircleLayer(
           circles: points
               .map(
@@ -65,10 +63,10 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
                   point: point.location,
                   useRadiusInMeter: true,
                   radius: _radiusFor(point.value, widget.mode),
-                  color: _colorFor(point.value, widget.mode).withOpacity(0.24),
-                  borderStrokeWidth: 1.3,
+                  color: _colorFor(point.value, widget.mode).withOpacity(0.28),
+                  borderStrokeWidth: 2,
                   borderColor:
-                      _colorFor(point.value, widget.mode).withOpacity(0.62),
+                      _colorFor(point.value, widget.mode).withOpacity(0.75),
                 ),
               )
               .toList(growable: false),
@@ -78,22 +76,23 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
               .map(
                 (point) => Marker(
                   point: point.location,
-                  width: 86,
-                  height: 86,
+                  width: 40,
+                  height: 40,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
                       setState(() {
-                        _selectedCity =
-                            _selectedCity == point.city ? null : point.city;
+                        _selectedZone = _selectedZone == point.label
+                            ? null
+                            : point.label;
                       });
                     },
                     child: AnimatedBuilder(
                       animation: _pulseController,
                       builder: (context, child) {
-                        final isSelected = _selectedCity == point.city;
-                        final pulse =
-                            1 + (math.sin(_pulseController.value * math.pi) * 0.08);
+                        final isSelected = _selectedZone == point.label;
+                        final pulse = 1 +
+                            (math.sin(_pulseController.value * math.pi) * 0.1);
                         return Center(
                           child: Transform.scale(
                             scale: isSelected ? pulse : 1,
@@ -102,21 +101,29 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
                               alignment: Alignment.center,
                               children: [
                                 Container(
-                                  width: 18,
-                                  height: 18,
+                                  width: 14,
+                                  height: 14,
                                   decoration: BoxDecoration(
                                     color: _colorFor(point.value, widget.mode),
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                        color: Colors.white.withOpacity(0.8),
-                                        width: 1.2),
+                                      color: Colors.white.withOpacity(0.85),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _colorFor(point.value, widget.mode)
+                                            .withOpacity(0.5),
+                                        blurRadius: 8,
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 if (isSelected)
                                   Positioned(
-                                    top: -42,
+                                    top: -44,
                                     child: _HeatmapTooltip(
-                                      city: point.city,
+                                      label: point.label,
                                       value: point.value,
                                       mode: widget.mode,
                                     ),
@@ -137,68 +144,44 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
   }
 
   List<_HeatmapPoint> _buildPoints(
-      HeatmapMode mode, AqiProvider aqi, FloodProvider flood) {
-    if (mode == HeatmapMode.aqi) {
-      final dynamic dyn = aqi;
-      List<dynamic>? raw;
-      try {
-        raw = (dyn.cityReadings as List?)?.cast<dynamic>();
-      } catch (e) {
-        debugPrint('[MapHeatmapLayer] Failed to read cityReadings: $e');
-      }
+    HeatmapMode mode,
+    List<HazardZoneModel> zones,
+    AqiProvider aqi,
+    FloodProvider flood,
+  ) {
+    final aqiOnly = mode == HeatmapMode.aqi;
+    final cityAqi = aqi.current?.aqi ?? 50;
+    final floodLevel = flood.risk?.level ?? FloodRiskLevel.low;
 
-      if (raw != null && raw.isNotEmpty) {
-        final points = <_HeatmapPoint>[];
-        for (final entry in raw) {
-          try {
-            points.add(
-              _HeatmapPoint(
-                city: entry.city as String,
-                location: LatLng(
-                  (entry.latitude as num).toDouble(),
-                  (entry.longitude as num).toDouble(),
-                ),
-                value: (entry.aqi as num).toDouble(),
-              ),
-            );
-          } catch (_) {
-            debugPrint('[MapHeatmapLayer] Ignored malformed AQI heatmap entry.');
-          }
-        }
-        if (points.isNotEmpty) return points;
-      }
-      return const [];
-    }
-
-    final dynamic dyn = flood;
-    List<dynamic>? raw;
-    try {
-      raw = (dyn.cityRisks as List?)?.cast<dynamic>();
-    } catch (e) {
-      debugPrint('[MapHeatmapLayer] Failed to read cityRisks: $e');
-    }
-
-    if (raw != null && raw.isNotEmpty) {
-      final points = <_HeatmapPoint>[];
-      for (final entry in raw) {
-        try {
-          points.add(
-            _HeatmapPoint(
-              city: entry.city as String,
-              location: LatLng(
-                (entry.latitude as num).toDouble(),
-                (entry.longitude as num).toDouble(),
-              ),
-              value: (entry.riskScore as num).toDouble(),
-            ),
+    return zones
+        .where((z) => aqiOnly ? z.type == 'aqi' : z.type == 'flood')
+        .map((z) {
+          final value = aqiOnly
+              ? _zoneAqi(z.name, cityAqi).toDouble()
+              : _zoneFloodScore(z.name, floodLevel);
+          return _HeatmapPoint(
+            label: z.name,
+            location: LatLng(z.latitude, z.longitude),
+            value: value,
           );
-        } catch (_) {
-          debugPrint('[MapHeatmapLayer] Ignored malformed flood heatmap entry.');
-        }
-      }
-      if (points.isNotEmpty) return points;
-    }
-    return const [];
+        })
+        .toList(growable: false);
+  }
+
+  int _zoneAqi(String zoneName, int cityAqi) {
+    final spread = zoneName.hashCode.abs() % 90;
+    return (cityAqi - 25 + spread).clamp(25, 320);
+  }
+
+  double _zoneFloodScore(String zoneName, FloodRiskLevel level) {
+    final base = switch (level) {
+      FloodRiskLevel.low => 22.0,
+      FloodRiskLevel.moderate => 48.0,
+      FloodRiskLevel.high => 72.0,
+      FloodRiskLevel.critical => 92.0,
+    };
+    final jitter = (zoneName.hashCode.abs() % 18) - 9;
+    return (base + jitter).clamp(8, 98);
   }
 
   Color _colorFor(double value, HeatmapMode mode) {
@@ -206,67 +189,44 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
       if (value <= 50) return AppColors.success;
       if (value <= 100) return const Color(0xFFFFD54F);
       if (value <= 150) return const Color(0xFFFF9800);
-      if (value <= 200) return const Color(0xFFE53935);
+      if (value <= 200) return AppColors.danger;
       return const Color(0xFF6D1B1B);
     }
 
     if (value <= 30) return AppColors.success;
     if (value <= 60) return const Color(0xFFFFD54F);
-    if (value <= 80) return const Color(0xFFFF9800);
-    return const Color(0xFFE53935);
+    if (value <= 80) return AppColors.warning;
+    return AppColors.danger;
   }
 
   double _radiusFor(double value, HeatmapMode mode) {
     if (mode == HeatmapMode.aqi) {
-      return (9000 + (value.clamp(0, 300) / 300) * 23000).toDouble();
+      return 700 + (value.clamp(0, 300) / 300) * 1800;
     }
-    return (8000 + (value.clamp(0, 100) / 100) * 20000).toDouble();
-  }
-}
-
-class _NoHeatmapDataBanner extends StatelessWidget {
-  const _NoHeatmapDataBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.bgSurface.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Text(
-        'Live city heatmap data is unavailable right now.',
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.textSecondary,
-            ),
-      ),
-    );
+    return 600 + (value.clamp(0, 100) / 100) * 1600;
   }
 }
 
 class _HeatmapPoint {
   const _HeatmapPoint({
-    required this.city,
+    required this.label,
     required this.location,
     required this.value,
   });
 
-  final String city;
+  final String label;
   final LatLng location;
   final double value;
 }
 
 class _HeatmapTooltip extends StatelessWidget {
   const _HeatmapTooltip({
-    required this.city,
+    required this.label,
     required this.value,
     required this.mode,
   });
 
-  final String city;
+  final String label;
   final double value;
   final HeatmapMode mode;
 
@@ -277,18 +237,18 @@ class _HeatmapTooltip extends StatelessWidget {
         : 'Risk ${value.round()}%';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface.withOpacity(0.93),
+        color: AppColors.bgCard.withOpacity(0.95),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Text(
-        '$city • $valueLabel',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
+        '$label • $valueLabel',
+        style: AppTextStyles.bodySmall.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

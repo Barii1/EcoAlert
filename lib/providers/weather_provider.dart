@@ -54,9 +54,10 @@ class WeatherProvider extends ChangeNotifier {
             'weather_code',
             'surface_pressure',
           ].join(','),
+          'hourly': 'temperature_2m,weather_code',
           'daily': 'temperature_2m_max,temperature_2m_min',
           'timezone': 'auto',
-          'forecast_days': 1,
+          'forecast_days': 2,
         },
       );
 

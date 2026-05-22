@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -29,12 +30,15 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
   // ── State ──────────────────────────────────────────────────────────────────
   bool _loadingStatus = true;
   bool _loadingPrediction = false;
+  bool _showTechnicalDetails = false;
 
   Map<String, dynamic>? _statusData;   // /api/predict/status
   Map<String, dynamic>? _rawResponse;  // raw cloudburst prediction response
   FloodRisk? _prediction;
   String? _statusError;
   String? _predictionError;
+
+  bool get _backendOnline => _statusError == null && _statusData != null;
 
   // Test city
   String _selectedCity = 'Lahore';
@@ -150,6 +154,10 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                     children: [
+                      if (!_backendOnline && !_loadingStatus) ...[
+                        _buildSetupCard(),
+                        const SizedBox(height: 20),
+                      ],
                       _buildSectionLabel('BACKEND HEALTH'),
                       const SizedBox(height: 8),
                       _buildStatusCard(),
@@ -238,11 +246,11 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
 
     if (_statusError != null) {
       return _errorCard(
-        icon: Icons.wifi_off_rounded,
-        title: 'Flask server unreachable',
-        subtitle: 'Make sure you ran: python app.py in backend/ecoalert-backend',
+        icon: Icons.dns_rounded,
+        title: 'ML backend not reachable',
+        subtitle: _backendOfflineMessage(),
         detail: _statusError!,
-        color: AppColors.danger,
+        color: AppColors.warning,
       );
     }
 
@@ -360,7 +368,9 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    onPressed: _loadingPrediction ? null : _runPrediction,
+                    onPressed: (_loadingPrediction || !_backendOnline)
+                        ? null
+                        : _runPrediction,
                     icon: _loadingPrediction
                         ? const SizedBox(width: 14, height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textInverse))
@@ -377,8 +387,15 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Sends lat/lon to Flask → Open-Meteo weather fetch → LogisticRegression model → returns risk',
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textDisabled, height: 1.4),
+                _backendOnline
+                    ? 'Sends lat/lon to Flask → Open-Meteo weather → LogisticRegression → risk level'
+                    : 'Start the Flask backend above to enable live ML tests.',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: _backendOnline
+                      ? AppColors.textDisabled
+                      : AppColors.warning,
+                  height: 1.4,
+                ),
               ),
             ],
           ),
@@ -389,7 +406,9 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
           _errorCard(
             icon: Icons.model_training,
             title: 'Prediction failed',
-            subtitle: 'Check Flask terminal for traceback',
+            subtitle: _backendOnline
+                ? 'Check the Flask terminal for a traceback'
+                : 'Backend must be online before running a test',
             detail: _predictionError!,
             color: AppColors.warning,
           ),
@@ -716,6 +735,122 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
     );
   }
 
+  Widget _buildSetupCard() {
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.terminal_rounded,
+                    color: AppColors.info, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Start the ML backend',
+                  style: AppTextStyles.titleMed.copyWith(color: AppColors.textPrimary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _setupStep('1', 'Open a terminal in backend/ecoalert-backend'),
+          _setupStep('2', 'python -m venv venv  →  activate venv  →  pip install -r requirements.txt'),
+          _setupStep('3', 'python app.py  (listens on ${AppConfig.uploadApiBaseUrl})'),
+          if (kIsWeb) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Chrome can only call localhost if Flask is running on this PC. '
+              'WAQI and flood cards on Home still work without Flask.',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.45,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _fetchStatus,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Check again'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _setupStep(String number, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.bgElevated,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Text(
+              number,
+              style: AppTextStyles.label.copyWith(color: AppColors.primary),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _backendOfflineMessage() {
+    if (kIsWeb) {
+      return 'Flask is not running at ${AppConfig.uploadApiBaseUrl}, or the browser blocked the request. '
+          'AQI below uses WAQI directly — no backend needed.';
+    }
+    return 'Start Flask with python app.py in backend/ecoalert-backend. '
+        'AQI below still works without the backend.';
+  }
+
+  String _friendlyErrorDetail(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('failed to fetch') || lower.contains('connection refused')) {
+      return 'Cannot reach ${AppConfig.uploadApiBaseUrl} — server likely stopped.';
+    }
+    if (lower.contains('timeout')) {
+      return 'Request timed out. Flask may be slow or unreachable.';
+    }
+    if (raw.length > 120) {
+      return '${raw.substring(0, 120)}…';
+    }
+    return raw;
+  }
+
   Widget _errorCard({
     required IconData icon,
     required String title,
@@ -723,6 +858,7 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
     required String detail,
     required Color color,
   }) {
+    final friendly = _friendlyErrorDetail(detail);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -730,27 +866,72 @@ class _ModelStatusScreenState extends State<ModelStatusScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withOpacity(0.25)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTextStyles.titleMed.copyWith(color: color)),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
-                const SizedBox(height: 6),
-                Text(detail,
-                    style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textDisabled, fontFamily: 'monospace'),
-                    maxLines: 3, overflow: TextOverflow.ellipsis),
-              ],
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTextStyles.titleMed.copyWith(color: color)),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      friendly,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
+          if (detail != friendly || detail.length > 80) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => setState(() => _showTechnicalDetails = !_showTechnicalDetails),
+              child: Row(
+                children: [
+                  Icon(
+                    _showTechnicalDetails
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _showTechnicalDetails ? 'Hide technical details' : 'Show technical details',
+                    style: AppTextStyles.label.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            if (_showTechnicalDetails) ...[
+              const SizedBox(height: 6),
+              SelectableText(
+                detail,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textDisabled,
+                  fontFamily: 'monospace',
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );

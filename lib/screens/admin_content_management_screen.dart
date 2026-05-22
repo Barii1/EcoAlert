@@ -14,7 +14,7 @@ class _AdminContentManagementScreenState
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  final List<_AdminContentEntry> _allContent = const [
+  final List<_AdminContentEntry> _allContent = [
     _AdminContentEntry(
       title: 'Surviving Flash Floods',
       type: 'Safety Guide',
@@ -77,7 +77,8 @@ class _AdminContentManagementScreenState
     return _allContent.where((item) {
       if (!_matchesFilter(item)) return false;
       if (query.isEmpty) return true;
-      return item.type.toLowerCase().contains(query) ||
+      return item.title.toLowerCase().contains(query) ||
+          item.type.toLowerCase().contains(query) ||
           item.city.toLowerCase().contains(query) ||
           item.description.toLowerCase().contains(query);
     }).toList(growable: false);
@@ -96,8 +97,196 @@ class _AdminContentManagementScreenState
     }
   }
 
+  // ── Add / Edit sheet ───────────────────────────────────────────────────────
+
+  void _showArticleSheet({_AdminContentEntry? existing, int? index}) {
+    final titleCtrl = TextEditingController(text: existing?.title ?? '');
+    final descCtrl = TextEditingController(text: existing?.description ?? '');
+    String type = existing?.type ?? 'Safety Guide';
+    String city = existing?.city ?? 'Lahore';
+    String status = existing?.status ?? 'Draft';
+
+    final types = ['Safety Guide', 'Educational', 'Preparedness', 'Announcement'];
+    final cities = ['ALL', 'Lahore', 'Karachi', 'Islamabad', 'Peshawar', 'Multan', 'Quetta'];
+    final statuses = ['Draft', 'Published', 'Archived'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF162e2e),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        existing == null ? 'New Article' : 'Edit Article',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _sheetField(titleCtrl, 'Title', 'e.g. Flash Flood Safety Tips'),
+                  const SizedBox(height: 12),
+                  _sheetField(descCtrl, 'Description', 'Short summary...', maxLines: 3),
+                  const SizedBox(height: 12),
+                  _sheetDropdown<String>(
+                    label: 'Type',
+                    value: type,
+                    items: types,
+                    onChanged: (v) => setSheet(() => type = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  _sheetDropdown<String>(
+                    label: 'City',
+                    value: city,
+                    items: cities,
+                    onChanged: (v) => setSheet(() => city = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  _sheetDropdown<String>(
+                    label: 'Status',
+                    value: status,
+                    items: statuses,
+                    onChanged: (v) => setSheet(() => status = v!),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      final title = titleCtrl.text.trim();
+                      if (title.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Title is required')),
+                        );
+                        return;
+                      }
+                      final entry = _AdminContentEntry(
+                        title: title,
+                        type: type,
+                        city: city,
+                        description: descCtrl.text.trim(),
+                        categoryColor: _colorForType(type),
+                        icon: _iconForType(type),
+                        timeAgo: existing == null ? 'Just now' : 'Edited just now',
+                        status: status,
+                        statusColor: _colorForStatus(status),
+                        isScheduled: status == 'Archived',
+                      );
+                      setState(() {
+                        if (index != null) {
+                          _allContent[index] = entry;
+                        } else {
+                          _allContent.insert(0, entry);
+                        }
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF06e0e0),
+                      foregroundColor: const Color(0xFF0f2323),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(
+                      existing == null ? 'Publish Article' : 'Save Changes',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  void _confirmDelete(int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF162e2e),
+        title: const Text('Delete Article', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Delete "${_allContent[index].title}"? This cannot be undone.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() => _allContent.removeAt(index));
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  Color _colorForType(String type) {
+    switch (type) {
+      case 'Safety Guide': return Colors.blue;
+      case 'Educational':  return Colors.orange;
+      case 'Preparedness': return Colors.grey;
+      case 'Announcement': return Colors.purple;
+      default:             return Colors.teal;
+    }
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'Safety Guide': return Icons.flood;
+      case 'Educational':  return Icons.school;
+      case 'Preparedness': return Icons.medical_services;
+      case 'Announcement': return Icons.campaign;
+      default:             return Icons.article;
+    }
+  }
+
+  Color _colorForStatus(String status) {
+    switch (status) {
+      case 'Published': return Colors.green;
+      case 'Draft':     return Colors.grey;
+      case 'Archived':  return Colors.yellow;
+      default:          return Colors.white;
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
+    final filtered = _filteredContent;
     return Scaffold(
       backgroundColor: const Color(0xFF0f2323),
       body: SafeArea(
@@ -123,20 +312,10 @@ class _AdminContentManagementScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Admin Panel',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 14,
-                          ),
-                        ),
+                        Text('Admin Panel', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
                         const Text(
                           'Content Manager',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -147,16 +326,9 @@ class _AdminContentManagementScreenState
                     decoration: BoxDecoration(
                       color: const Color(0xFF06e0e0).withOpacity(0.2),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFF06e0e0).withOpacity(0.3),
-                        width: 2,
-                      ),
+                      border: Border.all(color: const Color(0xFF06e0e0).withOpacity(0.3), width: 2),
                     ),
-                    child: const Icon(
-                      Icons.person,
-                      color: Color(0xFF06e0e0),
-                      size: 24,
-                    ),
+                    child: const Icon(Icons.article, color: Color(0xFF06e0e0), size: 20),
                   ),
                 ],
               ),
@@ -169,7 +341,7 @@ class _AdminContentManagementScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Total Articles Card
+                    // Stats + Add New
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -180,13 +352,6 @@ class _AdminContentManagementScreenState
                         ),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.white.withOpacity(0.05)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF06e0e0).withOpacity(0.1),
-                            blurRadius: 20,
-                            spreadRadius: -5,
-                          ),
-                        ],
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -194,76 +359,42 @@ class _AdminContentManagementScreenState
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Total Articles',
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 14,
-                                ),
-                              ),
+                              Text('Total Articles', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
                               const SizedBox(height: 8),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.baseline,
                                 textBaseline: TextBaseline.alphabetic,
                                 children: [
-                                  const Text(
-                                    '24',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Text(
+                                    '${_allContent.length}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF06e0e0).withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: const Text(
-                                      '+2 this week',
-                                      style: TextStyle(
-                                        color: Color(0xFF06e0e0),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    child: Text(
+                                      '${_allContent.where((c) => c.status == 'Published').length} published',
+                                      style: const TextStyle(color: Color(0xFF06e0e0), fontSize: 11, fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                 ],
                               ),
                             ],
                           ),
-                          // TODO: implement content management
                           ElevatedButton.icon(
-                            onPressed: () {
-                              // TODO: Add new article
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Add new article — coming soon'),
-                                ),
-                              );
-                            },
+                            onPressed: () => _showArticleSheet(),
                             icon: const Icon(Icons.add_circle, size: 20),
-                            label: const Text(
-                              'Add New',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
+                            label: const Text('Add New', style: TextStyle(fontWeight: FontWeight.bold)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF06e0e0),
                               foregroundColor: const Color(0xFF0f2323),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               elevation: 4,
-                              shadowColor: const Color(0xFF06e0e0).withOpacity(0.3),
                             ),
                           ),
                         ],
@@ -275,18 +406,16 @@ class _AdminContentManagementScreenState
                     TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'Search type, city, description...',
+                        hintText: 'Search title, type, city...',
                         prefixIcon: const Icon(Icons.search, color: Colors.grey),
                         suffixIcon: _searchQuery.isEmpty
                             ? null
                             : IconButton(
                                 icon: const Icon(Icons.close, color: Colors.grey),
-                                onPressed: () {
-                                  setState(() {
-                                    _searchController.clear();
-                                    _searchQuery = '';
-                                  });
-                                },
+                                onPressed: () => setState(() {
+                                  _searchController.clear();
+                                  _searchQuery = '';
+                                }),
                               ),
                         filled: true,
                         fillColor: const Color(0xFF162e2e),
@@ -295,17 +424,10 @@ class _AdminContentManagementScreenState
                           borderSide: BorderSide.none,
                         ),
                         hintStyle: TextStyle(color: Colors.grey[400]),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                       style: const TextStyle(color: Colors.white),
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
+                      onChanged: (v) => setState(() => _searchQuery = v),
                     ),
                     const SizedBox(height: 12),
 
@@ -315,92 +437,43 @@ class _AdminContentManagementScreenState
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         children: [
-                          _buildFilterChip('All Content', 'All Content'),
+                          _buildFilterChip('All Content'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('Published', 'Published'),
+                          _buildFilterChip('Published'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('Drafts', 'Drafts'),
+                          _buildFilterChip('Drafts'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('Archived', 'Archived'),
+                          _buildFilterChip('Archived'),
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
 
-                    // Recent Updates
                     Text(
-                      'RECENT UPDATES',
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                      ),
+                      'ARTICLES  (${filtered.length})',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                     ),
                     const SizedBox(height: 12),
 
-                    if (_filteredContent.isEmpty)
+                    if (filtered.isEmpty)
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
                           color: const Color(0xFF162e2e),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: Colors.white.withOpacity(0.05)),
                         ),
-                        child: const Text(
-                          'No content found',
-                          style: TextStyle(color: Colors.white70),
-                          textAlign: TextAlign.center,
-                        ),
+                        child: const Text('No articles found', style: TextStyle(color: Colors.white70), textAlign: TextAlign.center),
                       )
                     else
-                      ..._filteredContent.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final content = entry.value;
+                      ...filtered.map((content) {
+                        final realIndex = _allContent.indexOf(content);
                         return Padding(
-                          padding: EdgeInsets.only(
-                            bottom: index == _filteredContent.length - 1 ? 0 : 12,
-                          ),
-                          child: _buildArticleCard(
-                            title: content.title,
-                            category: content.type,
-                            categoryColor: content.categoryColor,
-                            icon: content.icon,
-                            timeAgo: content.timeAgo,
-                            status: content.status,
-                            statusColor: content.statusColor,
-                            isScheduled: content.isScheduled,
-                          ),
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildArticleCard(content, realIndex),
                         );
                       }),
-                  ],
-                ),
-              ),
-            ),
-
-            // Bottom Navigation
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF0f2323).withOpacity(0.95),
-                border: Border(
-                  top: BorderSide(color: Colors.white.withOpacity(0.05)),
-                ),
-              ),
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).padding.bottom,
-                  top: 12,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildNavItem(Icons.dashboard, 'Home', false, () {
-                      Navigator.pop(context);
-                    }),
-                    _buildNavItem(Icons.map, 'Map', false, () {}),
-                    _buildNavItem(Icons.assignment, 'Reports', false, () {}, hasNotification: true),
-                    _buildNavItem(Icons.article, 'Content', true, () {}),
                   ],
                 ),
               ),
@@ -411,16 +484,13 @@ class _AdminContentManagementScreenState
     );
   }
 
-  Widget _buildFilterChip(String label, String value) {
-    final isSelected = _selectedFilter == value;
+  Widget _buildFilterChip(String label) {
+    final isSelected = _selectedFilter == label ||
+        (_selectedFilter == 'All Content' && label == 'All Content');
     return ChoiceChip(
       label: Text(label),
       selected: isSelected,
-      onSelected: (selected) {
-        setState(() {
-          _selectedFilter = value;
-        });
-      },
+      onSelected: (_) => setState(() => _selectedFilter = label),
       selectedColor: const Color(0xFF06e0e0),
       backgroundColor: const Color(0xFF162e2e),
       labelStyle: TextStyle(
@@ -428,24 +498,11 @@ class _AdminContentManagementScreenState
         fontWeight: FontWeight.bold,
         fontSize: 12,
       ),
-      side: BorderSide(
-        color: isSelected
-            ? const Color(0xFF06e0e0)
-            : Colors.white.withOpacity(0.1),
-      ),
+      side: BorderSide(color: isSelected ? const Color(0xFF06e0e0) : Colors.white.withOpacity(0.1)),
     );
   }
 
-  Widget _buildArticleCard({
-    required String title,
-    required String category,
-    required Color categoryColor,
-    required IconData icon,
-    required String timeAgo,
-    required String status,
-    required Color statusColor,
-    bool isScheduled = false,
-  }) {
+  Widget _buildArticleCard(_AdminContentEntry content, int index) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -462,10 +519,10 @@ class _AdminContentManagementScreenState
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: categoryColor.withOpacity(0.1),
+                  color: content.categoryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: categoryColor, size: 24),
+                child: Icon(content.icon, color: content.categoryColor, size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -473,45 +530,34 @@ class _AdminContentManagementScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      content.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text(
-                          category,
-                          style: TextStyle(
-                            color: categoryColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '•',
-                          style: TextStyle(color: Colors.grey[400]),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          timeAgo,
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text(content.type, style: TextStyle(color: content.categoryColor, fontSize: 12, fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 6),
+                        Text('•', style: TextStyle(color: Colors.grey[400])),
+                        const SizedBox(width: 6),
+                        Text(content.city, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                        const SizedBox(width: 6),
+                        Text('•', style: TextStyle(color: Colors.grey[400])),
+                        const SizedBox(width: 6),
+                        Text(content.timeAgo, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
                       ],
                     ),
+                    if (content.description.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        content.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12),
+                      ),
+                    ],
                   ],
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.more_vert, color: Colors.grey),
-                onPressed: () {},
               ),
             ],
           ),
@@ -519,59 +565,44 @@ class _AdminContentManagementScreenState
           Container(
             padding: const EdgeInsets.only(top: 12),
             decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Colors.white.withOpacity(0.05)),
-              ),
+              border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Status badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: content.statusColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (!isScheduled)
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            shape: BoxShape.circle,
-                          ),
-                        )
-                      else
-                        Icon(
-                          Icons.schedule,
-                          size: 12,
-                          color: statusColor,
-                        ),
+                      content.isScheduled
+                          ? Icon(Icons.schedule, size: 12, color: content.statusColor)
+                          : Container(width: 6, height: 6, decoration: BoxDecoration(color: content.statusColor, shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text(
-                        status.toUpperCase(),
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
+                        content.status.toUpperCase(),
+                        style: TextStyle(color: content.statusColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                       ),
                     ],
                   ),
                 ),
+                // Actions
                 Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.grey, size: 20),
-                      onPressed: () {},
+                      icon: const Icon(Icons.edit, color: Color(0xFF06e0e0), size: 20),
+                      tooltip: 'Edit',
+                      onPressed: () => _showArticleSheet(existing: content, index: index),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                      onPressed: () {},
+                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                      tooltip: 'Delete',
+                      onPressed: () => _confirmDelete(index),
                     ),
                   ],
                 ),
@@ -583,60 +614,59 @@ class _AdminContentManagementScreenState
     );
   }
 
-  Widget _buildNavItem(
-    IconData icon,
-    String label,
-    bool isSelected,
-    VoidCallback onTap, {
-    bool hasNotification = false,
+  Widget _sheetField(TextEditingController ctrl, String label, String hint, {int maxLines = 1}) {
+    return TextField(
+      controller: ctrl,
+      maxLines: maxLines,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white60),
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey[600]),
+        filled: true,
+        fillColor: const Color(0xFF0f2323),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+    );
+  }
+
+  Widget _sheetDropdown<T>({
+    required String label,
+    required T value,
+    required List<T> items,
+    required ValueChanged<T?> onChanged,
   }) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? const Color(0xFF06e0e0) : Colors.grey[400],
-                  size: 24,
-                ),
-                if (hasNotification && !isSelected)
-                  Positioned(
-                    right: -6,
-                    top: -4,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF06e0e0),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? const Color(0xFF06e0e0) : Colors.grey[400],
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0f2323),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButtonFormField<T>(
+        value: value,
+        dropdownColor: const Color(0xFF162e2e),
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white60),
+          border: InputBorder.none,
         ),
+        items: items
+            .map((i) => DropdownMenuItem<T>(
+                  value: i,
+                  child: Text(i.toString(), style: const TextStyle(color: Colors.white)),
+                ))
+            .toList(),
+        onChanged: onChanged,
       ),
     );
   }
 }
 
 class _AdminContentEntry {
-  const _AdminContentEntry({
+  _AdminContentEntry({
     required this.title,
     required this.type,
     required this.city,
@@ -649,14 +679,14 @@ class _AdminContentEntry {
     this.isScheduled = false,
   });
 
-  final String title;
-  final String type;
-  final String city;
-  final String description;
-  final Color categoryColor;
-  final IconData icon;
-  final String timeAgo;
-  final String status;
-  final Color statusColor;
-  final bool isScheduled;
+  String title;
+  String type;
+  String city;
+  String description;
+  Color categoryColor;
+  IconData icon;
+  String timeAgo;
+  String status;
+  Color statusColor;
+  bool isScheduled;
 }
