@@ -26,7 +26,14 @@ This repo includes a 6-class AQI image classifier in `IMAGE_AQI/`.
 ### Dataset
 
 - Source: Kaggle "air-pollution-image-dataset-from-india-and-nepal"
+- Link: https://www.kaggle.com/datasets/adarshrouniyar/air-pollution-image-dataset-from-india-and-nepal
 - Expected layout: `IMAGE_AQI/Data/<class_folders>`
+
+To download via `kagglehub`:
+
+```bash
+python -c "import kagglehub; print(kagglehub.dataset_download('adarshrouniyar/air-pollution-image-dataset-from-india-and-nepal'))"
+```
 
 ### Split into Train/Val/Test
 
@@ -81,7 +88,18 @@ Use the saved model and class names in `IMAGE_AQI/models/` for prediction.
 
 ### Packaged Outputs
 
-A convenience bundle is available at `IMAGE_AQI/aqi_image_outputs.zip` containing the model and results.
+Optional local bundle: `IMAGE_AQI/aqi_image_outputs.zip` (not committed to git).
+
+## Numerical Datasets
+
+Large CSV datasets are not committed to git. Place datasets in:
+
+- `AQI/data/` for AQI numerical data
+- `Cloudburst/data/` for cloudburst data
+
+For data sources, see:
+
+- Open-Meteo API: https://open-meteo.com/
 
 ## Getting Started
 

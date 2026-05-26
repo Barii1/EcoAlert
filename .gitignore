@@ -30,6 +30,10 @@ IMAGE_AQI/models/*.h5
 IMAGE_AQI/models/*.tflite
 IMAGE_AQI/aqi_image_outputs.zip
 
+# Numerical datasets (avoid large CSVs)
+AQI/data/
+Cloudburst/data/
+
 # Local utility scripts
 inspect_data.ps1
 inspect_data_actual.ps1
