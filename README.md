@@ -19,6 +19,64 @@ AI-powered environmental hazard prediction and alert system for Pakistan.
 - **Maps**: Google Maps Flutter
 - **State Management**: Provider
 
+## ML Workflow (Image AQI)
+
+This repo includes a 6-class AQI image classifier in `IMAGE_AQI/`.
+
+### Dataset
+
+- Source: Kaggle "air-pollution-image-dataset-from-india-and-nepal"
+- Expected layout: `IMAGE_AQI/Data/<class_folders>`
+
+### Split into Train/Val/Test
+
+```bash
+python IMAGE_AQI/src/aqi_image_6class.py
+```
+
+Output is written to `IMAGE_AQI/processed_6class/`.
+
+### Train
+
+```bash
+python IMAGE_AQI/src/train_aqi_image.py
+```
+
+Artifacts are saved to:
+
+- Models: `IMAGE_AQI/models/`
+- Reports and plots: `IMAGE_AQI/results/`
+
+### Backend Inference API
+
+The Flask backend exposes an AQI image prediction endpoint:
+
+- `POST /api/aqi-image/predict`
+- Form-data field: `image`
+
+Optional environment overrides:
+
+- `AQI_IMAGE_MODEL_PATH`
+- `AQI_IMAGE_CLASS_NAMES_PATH`
+
+### On-device (TFLite)
+
+Export a TFLite model for Flutter on-device inference:
+
+```bash
+python IMAGE_AQI/src/export_aqi_image_tflite.py
+```
+
+The output is written to `IMAGE_AQI/models/aqi_image_model.tflite`.
+
+### Inference
+
+Use the saved model and class names in `IMAGE_AQI/models/` for prediction.
+
+### Packaged Outputs
+
+A convenience bundle is available at `IMAGE_AQI/aqi_image_outputs.zip` containing the model and results.
+
 ## Getting Started
 
 ### Prerequisites

@@ -6,6 +6,7 @@
 .pub/
 build/
 .venv/
+.venv-tf/
 
 # IDE
 .idea/
@@ -20,6 +21,12 @@ build/
 *.pyc
 *.swp
 .DS_Store
+
+# AQI image model artifacts (keep reports, ignore heavy binaries)
+IMAGE_AQI/models/*.keras
+IMAGE_AQI/models/*.h5
+IMAGE_AQI/models/*.tflite
+IMAGE_AQI/aqi_image_outputs.zip
 
 # Firebase
 .firebase/

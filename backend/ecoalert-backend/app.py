@@ -2,6 +2,7 @@
 
 from flask import Flask
 from flask_cors import CORS
+from routes.aqi_image_routes import aqi_image_bp
 from routes.upload_routes import upload_bp
 
 app = Flask(__name__)
@@ -13,6 +14,7 @@ allowed_origins = [
 CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
 app.register_blueprint(upload_bp)
+app.register_blueprint(aqi_image_bp)
 
 
 @app.route("/health", methods=["GET"])
