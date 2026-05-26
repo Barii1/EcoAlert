@@ -5,15 +5,22 @@ import 'package:geocoding/geocoding.dart';
 class LocationProvider extends ChangeNotifier {
   Position? _currentPosition;
   String _currentCity = 'Lahore';
+  String _currentArea = 'Lahore';
   bool _isLoading = false;
   String? _errorMessage;
+  bool _hasRequestedPermission = false;
+  bool _hasPermission = false;
 
   Position? get currentPosition => _currentPosition;
   String get currentCity => _currentCity;
+  String get currentArea => _currentArea;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get hasRequestedPermission => _hasRequestedPermission;
+  bool get hasPermission => _hasPermission;
 
   Future<void> getCurrentLocation() async {
+    if (_isLoading) return;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -29,6 +36,7 @@ class LocationProvider extends ChangeNotifier {
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
+        _hasRequestedPermission = true;
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           _errorMessage = 'Location permissions are denied';
@@ -39,11 +47,14 @@ class LocationProvider extends ChangeNotifier {
       }
 
       if (permission == LocationPermission.deniedForever) {
+        _hasRequestedPermission = true;
         _errorMessage = 'Location permissions are permanently denied';
         _isLoading = false;
         notifyListeners();
         return;
       }
+
+      _hasPermission = true;
 
       _currentPosition = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -66,11 +77,35 @@ class LocationProvider extends ChangeNotifier {
     try {
       List<Placemark> placemarks = await placemarkFromCoordinates(lat, lon);
       if (placemarks.isNotEmpty) {
-        _currentCity = placemarks.first.locality ?? 'Unknown';
+        final mark = placemarks.first;
+        final subLocality = (mark.subLocality ?? '').trim();
+        final locality = (mark.locality ?? '').trim();
+        final admin = (mark.administrativeArea ?? '').trim();
+
+        _currentCity = locality.isNotEmpty
+            ? locality
+            : admin.isNotEmpty
+                ? admin
+                : 'Unknown';
+
+        if (subLocality.isNotEmpty && locality.isNotEmpty) {
+          _currentArea = '$subLocality, $locality';
+        } else if (subLocality.isNotEmpty) {
+          _currentArea = subLocality;
+        } else if (locality.isNotEmpty && admin.isNotEmpty && locality != admin) {
+          _currentArea = '$locality, $admin';
+        } else if (locality.isNotEmpty) {
+          _currentArea = locality;
+        } else if (admin.isNotEmpty) {
+          _currentArea = admin;
+        } else {
+          _currentArea = 'Unknown';
+        }
       }
     } catch (e) {
       // Keep default city if geocoding fails
       _currentCity = 'Lahore';
+      _currentArea = 'Lahore';
     }
   }
 }

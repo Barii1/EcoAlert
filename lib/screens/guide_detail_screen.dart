@@ -1,136 +1,249 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_colors.dart';
+import '../config/app_spacing.dart';
+import '../config/app_text_styles.dart';
+import '../widgets/app_background.dart';
+import '../widgets/surface_card.dart';
+
 class GuideDetailScreen extends StatelessWidget {
   const GuideDetailScreen({
     super.key,
     required this.title,
     required this.category,
     required this.readTimeLabel,
+    this.accentColor = AppColors.primary,
+    this.icon = Icons.menu_book_rounded,
   });
 
   final String title;
   final String category;
   final String readTimeLabel;
+  final Color accentColor;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     final content = _contentFor(title: title, category: category);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0f2323),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0f2323),
-        foregroundColor: Colors.white,
-        title: Text(title),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        children: [
-          Row(
+      backgroundColor: Colors.transparent,
+      body: AppBackground(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF162e2e),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: Colors.white.withOpacity(0.06)),
-                ),
-                child: Text(
-                  category,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Icon(Icons.access_time, size: 16, color: Colors.white.withOpacity(0.5)),
-              const SizedBox(width: 6),
-              Text(
-                readTimeLabel,
-                style: TextStyle(color: Colors.white.withOpacity(0.6), fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _SectionCard(
-            title: 'Summary',
-            child: Text(
-              content.summary,
-              style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.4),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...content.sections.map(
-            (s) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _SectionCard(
-                title: s.title,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 8, 0),
+                child: Row(
                   children: [
-                    for (final step in s.steps)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 22,
-                              height: 22,
-                              margin: const EdgeInsets.only(top: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF06e0e0).withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFF06e0e0).withOpacity(0.25)),
-                              ),
-                              child: const Icon(Icons.check, size: 14, color: Color(0xFF06e0e0)),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                step,
-                                style: TextStyle(color: Colors.white.withOpacity(0.82), height: 1.35),
-                              ),
-                            ),
-                          ],
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back_rounded,
+                          color: AppColors.textPrimary),
+                    ),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: AppTextStyles.titleMed.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                    ),
                   ],
                 ),
               ),
-            ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.p16,
+                    AppSpacing.p8,
+                    AppSpacing.p16,
+                    AppSpacing.p24,
+                  ),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.p16),
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radius16),
+                        gradient: LinearGradient(
+                          colors: [
+                            accentColor.withOpacity(0.2),
+                            AppColors.bgCard,
+                          ],
+                        ),
+                        border: Border.all(
+                          color: accentColor.withOpacity(0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: accentColor.withOpacity(0.15),
+                              borderRadius:
+                                  BorderRadius.circular(AppSpacing.radius12),
+                            ),
+                            child: Icon(icon, color: accentColor, size: 28),
+                          ),
+                          const SizedBox(width: AppSpacing.p12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  category,
+                                  style: AppTextStyles.label.copyWith(
+                                    color: accentColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.access_time,
+                                        size: 14,
+                                        color: AppColors.textSecondary),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      readTimeLabel,
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.p16),
+                    SurfaceCard(
+                      child: Text(
+                        content.summary,
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary.withOpacity(0.9),
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.p12),
+                    ...content.sections.map(
+                      (s) => Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: AppSpacing.p12),
+                        child: _SectionCard(
+                          title: s.title,
+                          accentColor: accentColor,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (var i = 0; i < s.steps.length; i++)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      bottom: AppSpacing.p10),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 24,
+                                        height: 24,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: accentColor.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(
+                                              6),
+                                          border: Border.all(
+                                            color:
+                                                accentColor.withOpacity(0.35),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${i + 1}',
+                                          style: AppTextStyles.label.copyWith(
+                                            color: accentColor,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppSpacing.p10),
+                                      Expanded(
+                                        child: Text(
+                                          s.steps[i],
+                                          style: AppTextStyles.bodySmall
+                                              .copyWith(
+                                            color: AppColors.textPrimary
+                                                .withOpacity(0.88),
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+  const _SectionCard({
+    required this.title,
+    required this.child,
+    required this.accentColor,
+  });
 
   final String title;
   final Widget child;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF162e2e),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
-      ),
+    return SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.p8),
+              Text(
+                title,
+                style: AppTextStyles.titleMed.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.p12),
           child,
         ],
       ),
@@ -238,7 +351,6 @@ _GuideContent _contentFor({required String title, required String category}) {
     );
   }
 
-  // Cloudburst or default
   return const _GuideContent(
     summary:
         'Sudden heavy rainfall can flood streets in minutes. Use this quick guide to avoid high-risk routes and stay safe.',

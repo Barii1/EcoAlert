@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'firebase_options.dart';
 import 'config/app_colors.dart';
-import 'services/firestore_service.dart';
+import 'config/app_config.dart';
+import 'config/app_navigator.dart';
 import 'services/notification_service.dart';
+import 'services/supabase_auth_service.dart';
+import 'services/supabase_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_root.dart';
 import 'screens/map_screen.dart';
@@ -30,6 +35,8 @@ import 'screens/report_confirmation_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/aqi_detail_screen.dart';
 import 'screens/flood_detail_screen.dart';
+import 'screens/model_status_screen.dart';
+
 import 'providers/alert_provider.dart';
 import 'providers/aqi_provider.dart';
 import 'providers/flood_provider.dart';
@@ -40,83 +47,95 @@ import 'providers/connectivity_provider.dart';
 import 'providers/report_provider.dart';
 import 'providers/danger_theme_provider.dart';
 import 'providers/weather_provider.dart';
+import 'providers/hazard_zone_provider.dart';
+import 'providers/community_provider.dart';
 import 'models/user_model.dart';
 import 'utils/page_transitions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase (Android uses google-services.json / firebase_options).
-  bool firebaseReady = false;
-  if (!kIsWeb) {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      firebaseReady = true;
-      debugPrint('[EcoAlert] Firebase initialized successfully');
-    } catch (e) {
-      debugPrint('[EcoAlert] Firebase init failed, running in demo mode: $e');
-    }
-  } else {
-    debugPrint('[EcoAlert] Web build — skipping Firebase init (demo mode)');
+  // Firebase — FCM push notifications only.
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    debugPrint('[EcoAlert] Firebase initialized (FCM only)');
+  } catch (e) {
+    debugPrint('[EcoAlert] Firebase init failed (FCM unavailable): $e');
   }
 
-  // Load theme preference before app starts
+  // Supabase — Auth + DB + Storage + Realtime.
+  await Supabase.initialize(
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabaseAnonKey,
+  );
+  final supabaseClient = Supabase.instance.client;
+  final supabaseService = SupabaseService(supabaseClient);
+  final supabaseAuthService = SupabaseAuthService(supabaseClient);
+
+  // Load saved theme before runApp so first frame uses correct theme.
   final themeProvider = ThemeProvider();
   await themeProvider.loadPreferences();
 
-  // Create shared FirestoreService if Firebase is ready.
-  final FirestoreService? firestoreService =
-      firebaseReady ? FirestoreService() : null;
-
-  final authProvider = AuthProvider(useFirebase: firebaseReady);
+  final authProvider = AuthProvider(
+    supabaseAuthService: supabaseAuthService,
+    supabaseService: supabaseService,
+    useSupabase: true,
+  );
   await authProvider.tryAutoLogin();
 
-  final alertProvider = AlertProvider(firestoreService: firestoreService);
-  final reportProvider = ReportProvider(firestoreService: firestoreService);
+  final alertProvider = AlertProvider(supabaseService: supabaseService);
+  final reportProvider = ReportProvider(supabaseService: supabaseService);
+  final hazardZoneProvider = HazardZoneProvider(supabaseService: supabaseService);
 
-  authProvider.onFirebaseLoginSuccess = () {
-    alertProvider.initFirestore();
-    reportProvider.initFirestore(
+  authProvider.onAuthLoginSuccess = () {
+    final user = authProvider.currentUser;
+    reportProvider.init(
       isAdmin: authProvider.isAdmin,
-      uid: authProvider.currentUser?.id,
+      uid: user?.id,
     );
-  };
-  authProvider.onFirebaseLogoutSuccess = () {
-    alertProvider.disposeFirestore();
-    reportProvider.disposeFirestore();
+    hazardZoneProvider.init();
+    if (user?.id != null) {
+      NotificationService.instance.saveFcmToken(user!.id).catchError((_) {});
+    }
   };
 
-  if (authProvider.isFirebaseUser) {
-    alertProvider.initFirestore();
-    reportProvider.initFirestore(
+  authProvider.onAuthLogoutSuccess = (uid) {
+    if (uid != null) {
+      NotificationService.instance.removeFcmToken(uid).catchError((_) {});
+    }
+    reportProvider.init();
+  };
+
+  // Bootstrap public data (no auth required).
+  await alertProvider.init();
+  hazardZoneProvider.init();
+
+  if (authProvider.isAuthenticated) {
+    final user = authProvider.currentUser;
+    await reportProvider.init(
       isAdmin: authProvider.isAdmin,
-      uid: authProvider.currentUser?.id,
+      uid: user?.id,
     );
-  } else {
-    await alertProvider.init();
-    await reportProvider.init();
   }
 
-  // Initialize push notifications if Firebase is ready.
-  if (firebaseReady) {
-    try {
-      await NotificationService.instance.init();
-      debugPrint('[EcoAlert] Notification service initialized');
-    } catch (e) {
-      // FCM unavailable — app continues without notifications
-      debugPrint('FCM init failed: $e');
+  // FCM push notifications.
+  try {
+    await NotificationService.instance.init();
+    debugPrint('[EcoAlert] Notification service initialized');
+    final uid = authProvider.currentUser?.id;
+    if (uid != null) {
+      NotificationService.instance.saveFcmToken(uid).catchError((_) {});
     }
+  } catch (e) {
+    debugPrint('[EcoAlert] FCM init failed: $e');
   }
 
   runApp(EcoAlertApp(
     themeProvider: themeProvider,
     authProvider: authProvider,
-    useFirebase: firebaseReady,
-    firestoreService: firestoreService,
     alertProvider: alertProvider,
     reportProvider: reportProvider,
+    hazardZoneProvider: hazardZoneProvider,
   ));
 }
 
@@ -125,18 +144,16 @@ class EcoAlertApp extends StatelessWidget {
     super.key,
     required this.themeProvider,
     required this.authProvider,
-    this.useFirebase = false,
-    this.firestoreService,
     required this.alertProvider,
     required this.reportProvider,
+    required this.hazardZoneProvider,
   });
 
   final ThemeProvider themeProvider;
   final AuthProvider authProvider;
-  final bool useFirebase;
-  final FirestoreService? firestoreService;
   final AlertProvider alertProvider;
   final ReportProvider reportProvider;
+  final HazardZoneProvider hazardZoneProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -152,10 +169,13 @@ class EcoAlertApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (_) => DangerThemeProvider()),
         ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
+        ChangeNotifierProvider<HazardZoneProvider>.value(value: hazardZoneProvider),
+        ChangeNotifierProvider(create: (_) => CommunityProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
+            navigatorKey: appNavigatorKey,
             title: 'EcoAlert',
             debugShowCheckedModeBanner: false,
             onGenerateRoute: (settings) {
@@ -181,15 +201,16 @@ class EcoAlertApp extends StatelessWidget {
                 '/admin': (_) => const AdminDashboardScreen(),
                 '/aqi-detail': (_) => const AqiDetailScreen(),
                 '/flood-detail': (_) => const FloodDetailScreen(),
+                '/model-status': (_) => const ModelStatusScreen(),
                 '/aqi-scan': (_) => const AqiScanScreen(),
                 '/alerts': (_) => const AlertsScreen(),
+                '/profile': (_) => const ProfileScreen(),
               };
 
               final pageBuilder = routes[settings.name];
               if (pageBuilder == null) return null;
               final page = pageBuilder(settings);
 
-              // Use slide-up for detail/modal screens, fade-through for everything else.
               const slideUpRoutes = {'/alert-detail', '/aqi-detail', '/flood-detail', '/report-hazard', '/aqi-scan'};
               if (slideUpRoutes.contains(settings.name)) {
                 return SlideUpPageRoute(page: page);
@@ -205,12 +226,12 @@ class EcoAlertApp extends StatelessWidget {
                 onSurface: AppColors.textPrimary,
                 error: AppColors.danger,
               ),
-              scaffoldBackgroundColor: AppColors.bgSecondary,
+              scaffoldBackgroundColor: AppColors.bgPrimary,
               cardColor: AppColors.bgCard,
               textTheme: ThemeData.dark().textTheme.apply(
-                    bodyColor: AppColors.textPrimary,
-                    displayColor: AppColors.textPrimary,
-                  ),
+                bodyColor: AppColors.textPrimary,
+                displayColor: AppColors.textPrimary,
+              ),
               appBarTheme: const AppBarTheme(
                 centerTitle: false,
                 elevation: 0,
@@ -259,7 +280,7 @@ class EcoAlertApp extends StatelessWidget {
                         : AppColors.borderSubtle),
               ),
             ),
-            themeMode: ThemeMode.dark,
+            themeMode: themeProvider.themeMode,
             home: const SplashScreen(),
           );
         },
@@ -277,13 +298,37 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  AqiProvider? _aqiProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextAqiProvider = context.read<AqiProvider>();
+    if (!identical(_aqiProvider, nextAqiProvider)) {
+      _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
+      _aqiProvider = nextAqiProvider;
+      _aqiProvider?.addListener(_syncDangerThemeFromAqi);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _syncDangerThemeFromAqi();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
+    super.dispose();
+  }
+
+  void _syncDangerThemeFromAqi() {
+    final aqi = _aqiProvider?.current;
+    context.read<DangerThemeProvider>().updateFromAqi(aqi);
+  }
 
   @override
   Widget build(BuildContext context) {
     final dangerTheme = context.watch<DangerThemeProvider>();
-
-    final aqiProvider = context.watch<AqiProvider>();
-    dangerTheme.updateFromAqi(aqiProvider.current);
 
     final screens = <Widget>[
       const HomeScreen(),
@@ -291,7 +336,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const AlertsScreen(),
       const CommunityScreen(),
       const LearnScreen(),
-      const ProfileScreen(),
     ];
 
     return Scaffold(
@@ -323,13 +367,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'Guest users can’t report hazards. Please sign in to continue.',
+                    'Guest users can\'t report hazards. Please sign in to continue.',
                   ),
                 ),
               );
               return;
             }
-
             Navigator.pushNamed(context, '/report-hazard');
           },
           backgroundColor: Colors.transparent,
@@ -365,12 +408,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
           NavigationDestination(
             icon: Transform.translate(
-              offset: Offset(0, -2),
-              child: Icon(Icons.notifications_outlined),
+              offset: const Offset(0, -2),
+              child: const Icon(Icons.notifications_outlined),
             ),
             selectedIcon: Transform.translate(
-              offset: Offset(0, -2),
-              child: Icon(Icons.notifications),
+              offset: const Offset(0, -2),
+              child: const Icon(Icons.notifications),
             ),
             label: 'Alerts',
           ),
@@ -383,11 +426,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book),
             label: 'Learn',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outlined),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
           ),
         ],
       ),

@@ -11,6 +11,7 @@ from services.firestore_service import (
 )
 from services.supabase_service import (
     delete_report_image_paths,
+    log_upload,
     upload_profile_picture,
     upload_report_image,
 )
@@ -111,6 +112,12 @@ def upload_report_images():
 
         # Write URLs back to Firestore
         update_report_image_urls(report_id, image_urls)
+        log_upload({
+            "type": "report_images",
+            "report_id": report_id,
+            "actor_uid": actor_uid,
+            "count": len(image_urls),
+        })
     except Exception:
         # Clean up only files uploaded in this request.
         delete_report_image_paths(uploaded_paths)
@@ -150,5 +157,10 @@ def upload_profile_pic():
     compressed = compress_image(file_bytes, max_size_kb=400)
     url = upload_profile_picture(compressed, uid)
     update_user_profile_picture(uid, url)
+
+    log_upload({
+        "type": "profile_picture",
+        "actor_uid": uid,
+    })
 
     return jsonify({"photoUrl": url}), 200

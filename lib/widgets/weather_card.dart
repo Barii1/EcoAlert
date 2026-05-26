@@ -1,11 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
 import '../models/weather_model.dart';
 
-/// Premium weather widget card — inspired by iPhone/Samsung weather widgets.
-/// Shows temperature, conditions, feels like, humidity, wind in a clean layout.
+/// Minimal weather card with a black surface, outlined frame, and a low/high/current graph.
 class WeatherCard extends StatelessWidget {
   const WeatherCard({
     super.key,
@@ -14,13 +15,161 @@ class WeatherCard extends StatelessWidget {
 
   final WeatherCondition weather;
 
-  IconData _getWeatherIcon() {
+  @override
+  Widget build(BuildContext context) {
+    final low = weather.tempMin ?? (weather.temperature - 2);
+    final high = weather.tempMax ?? (weather.temperature + 2);
+    final current = weather.temperature;
+    final accent = _accentForWeather();
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.p16),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.borderSubtle),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black54,
+            blurRadius: 22,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: _ChipLabel(
+                    label: weather.city.split(',').first.toUpperCase()),
+              ),
+              const SizedBox(width: 8),
+              const _ChipLabel(label: 'NOW'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          current.round().toString(),
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 58,
+                            height: 0.9,
+                            fontWeight: FontWeight.w300,
+                            letterSpacing: -3,
+                            fontFamily: 'Roboto',
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '°C',
+                            style: TextStyle(
+                              color: AppColors.textPrimary.withOpacity(0.55),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w400,
+                              fontFamily: 'Roboto',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      weather.description.toLowerCase(),
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 1.2,
+                        fontFamily: 'Roboto',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'H:${high.round()}°  L:${low.round()}°',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: accent.withOpacity(0.18)),
+                ),
+                child: Icon(
+                  _weatherIcon(),
+                  color: accent,
+                  size: 22,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 120,
+            child: _TemperatureGraph(
+              low: low,
+              high: high,
+              current: current,
+              accent: accent,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(height: 1, color: AppColors.borderSubtle),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniMetric(
+                  label: 'Feels like',
+                  value: '${weather.feelsLike.round()}°',
+                ),
+              ),
+              Expanded(
+                child: _MiniMetric(
+                  label: 'Humidity',
+                  value: '${weather.humidity}%',
+                ),
+              ),
+              Expanded(
+                child: _MiniMetric(
+                  label: 'Wind',
+                  value: '${weather.windSpeed.round()} km/h',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _weatherIcon() {
     final hour = weather.timestamp.hour;
     final isNight = hour < 6 || hour >= 19;
-
     switch (weather.weatherCode) {
       case 0:
-        return isNight ? Icons.nights_stay_rounded : Icons.wb_sunny_rounded;
       case 1:
         return isNight ? Icons.nights_stay_rounded : Icons.wb_sunny_rounded;
       case 2:
@@ -35,7 +184,6 @@ class WeatherCard extends StatelessWidget {
       case 55:
       case 56:
       case 57:
-        return Icons.grain_rounded;
       case 61:
       case 63:
       case 65:
@@ -61,237 +209,260 @@ class WeatherCard extends StatelessWidget {
     }
   }
 
-  Color _getWeatherAccent() {
+  Color _accentForWeather() {
     final code = weather.weatherCode;
-    if (code == 0 || code == 1) return const Color(0xFFFFB74D); // sunny warm
-    if (code == 2 || code == 3) return AppColors.textSecondary;
-    if (code >= 45 && code <= 48) return const Color(0xFF90A4AE); // fog
-    if (code >= 51 && code <= 67) return AppColors.primary; // rain
-    if (code >= 71 && code <= 86) return const Color(0xFFB3E5FC); // snow
-    if (code >= 95) return AppColors.warning; // thunderstorm
-    return AppColors.textSecondary;
+    if (code == 0 || code == 1) return const Color(0xFFAAAAAA);
+    if (code >= 61 && code <= 82) return const Color(0xFFAAAAAA);
+    if (code >= 95) return const Color(0xFFAAAAAA);
+    return const Color(0xFFB8B8B8);
   }
+}
 
-  List<Color> _getGradient() {
-    final code = weather.weatherCode;
-    if (code == 0 || code == 1) {
-      final hour = weather.timestamp.hour;
-      if (hour < 6 || hour >= 19) {
-        return [const Color(0xFF0D1B2A), const Color(0xFF1B2838)];
-      }
-      return [const Color(0xFF1A2640), const Color(0xFF2A3A55)];
-    }
-    if (code >= 61 || code >= 80) {
-      return [AppColors.bgCard, AppColors.primary.withOpacity(0.08)];
-    }
-    return [AppColors.bgCard, AppColors.bgElevated];
-  }
+class _ChipLabel extends StatelessWidget {
+  const _ChipLabel({required this.label});
+
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    final accent = _getWeatherAccent();
-
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.p20),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: _getGradient(),
-        ),
-        borderRadius: BorderRadius.circular(AppSpacing.radius20),
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: AppColors.borderSubtle),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: city + weather label
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.location_on_rounded, color: AppColors.textSecondary, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    weather.city.toUpperCase(),
-                    style: AppTextStyles.label.copyWith(
-                      color: AppColors.textSecondary,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                'NOW',
-                style: AppTextStyles.label.copyWith(
-                  color: AppColors.textSecondary,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: AppSpacing.p16),
-
-          // Main: big temperature + icon + description
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Temperature
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${weather.temperature.round()}',
-                          style: const TextStyle(
-                            fontSize: 56,
-                            fontWeight: FontWeight.w300,
-                            color: AppColors.textPrimary,
-                            height: 1.0,
-                            letterSpacing: -2,
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            '°C',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.textPrimary.withOpacity(0.6),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      weather.description,
-                      style: AppTextStyles.titleMed.copyWith(
-                        color: accent,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (weather.tempMin != null && weather.tempMax != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        'H:${weather.tempMax!.round()}°  L:${weather.tempMin!.round()}°',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              // Weather icon
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _getWeatherIcon(),
-                  color: accent,
-                  size: 36,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: AppSpacing.p16),
-
-          // Divider
-          Container(
-            height: 1,
-            color: AppColors.borderSubtle,
-          ),
-
-          const SizedBox(height: AppSpacing.p12),
-
-          // Details row: Feels Like, Humidity, Wind
-          Row(
-            children: [
-              _DetailItem(
-                icon: Icons.thermostat_rounded,
-                label: 'Feels like',
-                value: '${weather.feelsLike.round()}°',
-              ),
-              _divider(),
-              _DetailItem(
-                icon: Icons.water_drop_outlined,
-                label: 'Humidity',
-                value: '${weather.humidity}%',
-              ),
-              _divider(),
-              _DetailItem(
-                icon: Icons.air_rounded,
-                label: 'Wind',
-                value: '${weather.windSpeed.round()} km/h',
-              ),
-            ],
-          ),
-        ],
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 9,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 1.3,
+          fontFamily: 'Roboto',
+        ),
       ),
     );
   }
-
-  Widget _divider() => Container(
-        width: 1,
-        height: 32,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        color: AppColors.borderSubtle,
-      );
 }
 
-class _DetailItem extends StatelessWidget {
-  const _DetailItem({
-    required this.icon,
-    required this.label,
-    required this.value,
+class _TemperatureGraph extends StatelessWidget {
+  const _TemperatureGraph({
+    required this.low,
+    required this.high,
+    required this.current,
+    required this.accent,
   });
 
-  final IconData icon;
+  final double low;
+  final double high;
+  final double current;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final range = math.max(1.0, high - low);
+    final currentPosition = ((current - low) / range).clamp(0.0, 1.0);
+    const lowPosition = 0.0;
+    const highPosition = 1.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _GraphPainter(
+                  accent: accent,
+                  lowPosition: lowPosition,
+                  currentPosition: currentPosition,
+                  highPosition: highPosition,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              bottom: 0,
+              child: _GraphCaption(label: 'LOW', value: low.round()),
+            ),
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: _GraphCaption(label: 'HIGH', value: high.round()),
+            ),
+            Positioned(
+              left: constraints.maxWidth * currentPosition - 18,
+              top: 14,
+              child: _CurrentMarker(value: current.round(), accent: accent),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _GraphPainter extends CustomPainter {
+  _GraphPainter({
+    required this.accent,
+    required this.lowPosition,
+    required this.currentPosition,
+    required this.highPosition,
+  });
+
+  final Color accent;
+  final double lowPosition;
+  final double currentPosition;
+  final double highPosition;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.18)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final accentPaint = Paint()
+      ..color = accent
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final fillPaint = Paint()
+      ..color = accent.withOpacity(0.10)
+      ..style = PaintingStyle.fill;
+
+    final start = Offset(18, size.height * 0.70);
+    final mid = Offset(size.width * currentPosition, size.height * 0.28);
+    final end = Offset(size.width - 18, size.height * 0.55);
+
+    final path = Path()
+      ..moveTo(start.dx, start.dy)
+      ..quadraticBezierTo(size.width * 0.25, size.height * 0.72, size.width * 0.40, size.height * 0.48)
+      ..quadraticBezierTo(size.width * 0.54, size.height * 0.18, mid.dx, mid.dy)
+      ..quadraticBezierTo(size.width * 0.74, size.height * 0.14, end.dx, end.dy);
+
+    final fillPath = Path.from(path)
+      ..lineTo(size.width - 18, size.height - 8)
+      ..lineTo(18, size.height - 8)
+      ..close();
+
+    canvas.drawPath(fillPath, fillPaint);
+    canvas.drawPath(path, accentPaint);
+    canvas.drawLine(Offset(18, size.height * 0.82), Offset(size.width - 18, size.height * 0.82), linePaint);
+    canvas.drawCircle(mid, 5.5, Paint()..color = Colors.black..style = PaintingStyle.fill);
+    canvas.drawCircle(mid, 5.5, Paint()..color = accent..style = PaintingStyle.stroke..strokeWidth = 1.8);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GraphPainter oldDelegate) {
+    return oldDelegate.accent != accent ||
+        oldDelegate.currentPosition != currentPosition ||
+        oldDelegate.lowPosition != lowPosition ||
+        oldDelegate.highPosition != highPosition;
+  }
+}
+
+class _GraphCaption extends StatelessWidget {
+  const _GraphCaption({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textDisabled,
+            fontSize: 8,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.5,
+            fontFamily: 'Roboto',
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$value°',
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            fontFamily: 'Roboto',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CurrentMarker extends StatelessWidget {
+  const _CurrentMarker({required this.value, required this.accent});
+
+  final int value;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withOpacity(0.35)),
+      ),
+      child: Text(
+        '$value°',
+        style: TextStyle(
+          color: accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+          fontFamily: 'Roboto',
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniMetric extends StatelessWidget {
+  const _MiniMetric({required this.label, required this.value});
+
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Icon(icon, color: AppColors.textSecondary, size: 16),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: AppTextStyles.titleMed.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            fontFamily: 'Roboto',
           ),
-          Text(
-            label,
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 10,
-            ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textDisabled,
+            fontSize: 8,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.1,
+            fontFamily: 'Roboto',
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -56,15 +56,26 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    String readString(List<String> keys, {String fallback = ''}) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value is String && value.isNotEmpty) return value;
+      }
+      return fallback;
+    }
+
     return UserModel(
-      id: json['id'] as String,
-      username: json['username'] as String,
-      email: json['email'] as String,
-      phoneNumber: json['phoneNumber'] as String,
-      cnicNumber: json['cnicNumber'] as String,
-      province: json['province'] as String,
-      city: json['city'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      id: readString(['id']),
+      username: readString(['username']),
+      email: readString(['email']),
+      phoneNumber: readString(['phoneNumber', 'phone_number']),
+      cnicNumber: readString(['cnicNumber', 'cnic_number', 'cnic_hash']),
+      province: readString(['province']),
+      city: readString(['city']),
+      createdAt: DateTime.tryParse(
+            readString(['createdAt', 'created_at'])
+          ) ??
+          DateTime.now(),
       role: _userRoleFromString(json['role'] as String?),
     );
   }

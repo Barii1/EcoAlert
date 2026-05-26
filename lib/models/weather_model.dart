@@ -1,3 +1,16 @@
+/// One data point in an hourly temperature series.
+class HourlyWeatherPoint {
+  const HourlyWeatherPoint({
+    required this.time,
+    required this.temperature,
+    required this.weatherCode,
+  });
+
+  final DateTime time;
+  final double temperature;
+  final int weatherCode;
+}
+
 /// Current weather conditions for display in the weather widget.
 class WeatherCondition {
   const WeatherCondition({
@@ -14,6 +27,7 @@ class WeatherCondition {
     this.pressure = 0,
     this.tempMin,
     this.tempMax,
+    this.hourly = const [],
   });
 
   final double temperature; // Celsius
@@ -29,6 +43,8 @@ class WeatherCondition {
   final double pressure; // hPa
   final double? tempMin;
   final double? tempMax;
+  /// 24-hour series starting from midnight of today (one point per hour).
+  final List<HourlyWeatherPoint> hourly;
 
   /// Human-readable weather description from WMO code.
   String get description {
@@ -146,6 +162,7 @@ class WeatherCondition {
   factory WeatherCondition.fromOpenMeteo(Map<String, dynamic> data, String city) {
     final current = data['current'] as Map<String, dynamic>? ?? {};
     final daily = data['daily'] as Map<String, dynamic>?;
+    final hourlyData = data['hourly'] as Map<String, dynamic>?;
 
     double? tempMin;
     double? tempMax;
@@ -154,6 +171,26 @@ class WeatherCondition {
       final maxs = daily['temperature_2m_max'] as List<dynamic>?;
       if (mins != null && mins.isNotEmpty) tempMin = (mins[0] as num).toDouble();
       if (maxs != null && maxs.isNotEmpty) tempMax = (maxs[0] as num).toDouble();
+    }
+
+    final hourly = <HourlyWeatherPoint>[];
+    if (hourlyData != null) {
+      final times = hourlyData['time'] as List<dynamic>?;
+      final temps = hourlyData['temperature_2m'] as List<dynamic>?;
+      final codes = hourlyData['weather_code'] as List<dynamic>?;
+      if (times != null && temps != null) {
+        for (var i = 0; i < times.length; i++) {
+          final t = DateTime.tryParse(times[i] as String? ?? '');
+          if (t == null) continue;
+          hourly.add(HourlyWeatherPoint(
+            time: t,
+            temperature: (temps[i] as num?)?.toDouble() ?? 0,
+            weatherCode: (codes != null && i < codes.length)
+                ? (codes[i] as num?)?.toInt() ?? 0
+                : 0,
+          ));
+        }
+      }
     }
 
     return WeatherCondition(
@@ -170,6 +207,7 @@ class WeatherCondition {
       pressure: (current['surface_pressure'] as num?)?.toDouble() ?? 0,
       tempMin: tempMin,
       tempMax: tempMax,
+      hourly: hourly,
     );
   }
 }

@@ -1,21 +1,18 @@
 import 'package:flutter/material.dart';
-import 'profile_setup_screen.dart';
+import 'package:provider/provider.dart';
+import '../providers/location_provider.dart';
 
 class LocationPromptScreen extends StatelessWidget {
   const LocationPromptScreen({super.key});
 
-  void _allowLocation(BuildContext context) {
-    // In a real app, request location permission here
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const ProfileSetupScreen()),
-    );
+  Future<void> _allowLocation(BuildContext context) async {
+    await context.read<LocationProvider>().getCurrentLocation();
+    if (!context.mounted) return;
+    Navigator.pushReplacementNamed(context, '/navigation');
   }
 
   void _enterManually(BuildContext context) {
-    // Navigate to manual city entry or directly to profile setup
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const ProfileSetupScreen()),
-    );
+    Navigator.pushReplacementNamed(context, '/navigation');
   }
 
   @override

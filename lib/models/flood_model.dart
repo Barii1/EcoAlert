@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 enum FloodRiskLevel { low, moderate, high, critical }
@@ -6,23 +5,34 @@ enum FloodRiskLevel { low, moderate, high, critical }
 DateTime? _floodDateTimeFromJson(dynamic value) {
   if (value == null) return null;
   if (value is DateTime) return value;
-  if (value is Timestamp) return value.toDate();
   if (value is String) return DateTime.tryParse(value);
   return null;
 }
 
 class RainfallData {
-  final double mm24h;       // Rainfall in last 24 hours (mm)
-  final double mmPerHour;   // Current intensity (mm/hr)
-  final double mm48h;       // Rainfall in last 48 hours
+  final double mm24h;         // Rainfall in last 24 hours (mm)
+  final double mmPerHour;     // Current intensity (mm/hr)
+  final double mm48h;         // Rainfall in last 48 hours (mm)
+  final double temperature;   // Ambient temperature (°C) — used by ML model
+  final double humidity;      // Relative humidity (%) — used by ML model
   final DateTime timestamp;
-  const RainfallData({required this.mm24h, required this.mmPerHour, required this.mm48h, required this.timestamp});
+
+  const RainfallData({
+    required this.mm24h,
+    required this.mmPerHour,
+    required this.mm48h,
+    this.temperature = 0.0,
+    this.humidity = 0.0,
+    required this.timestamp,
+  });
 
   factory RainfallData.fromJson(Map<String, dynamic> json) {
     return RainfallData(
       mm24h: (json['mm24h'] as num).toDouble(),
       mmPerHour: (json['mmPerHour'] as num).toDouble(),
       mm48h: (json['mm48h'] as num).toDouble(),
+      temperature: (json['temperature'] as num?)?.toDouble() ?? 0.0,
+      humidity: (json['humidity'] as num?)?.toDouble() ?? 0.0,
       timestamp: _floodDateTimeFromJson(json['timestamp']) ?? DateTime.now(),
     );
   }
@@ -31,6 +41,8 @@ class RainfallData {
         'mm24h': mm24h,
         'mmPerHour': mmPerHour,
         'mm48h': mm48h,
+        'temperature': temperature,
+        'humidity': humidity,
         'timestamp': timestamp.toIso8601String(),
       };
 }

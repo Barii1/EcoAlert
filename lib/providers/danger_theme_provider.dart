@@ -3,7 +3,7 @@ import '../models/aqi_model.dart';
 
 /// Computes an adaptive danger accent color based on current environmental conditions.
 /// The UI subtly shifts from green → yellow → orange → red as danger increases.
-/// This gives the app a living, reactive feel during FYP demos.
+/// Updates accent colors when AQI crosses health thresholds.
 class DangerThemeProvider extends ChangeNotifier {
   int _dangerLevel = 0; // 0-5 scale
 
