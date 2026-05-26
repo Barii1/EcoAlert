@@ -19,18 +19,12 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# CORS — on Railway/Render we allow * so any device can hit the API.
-# Set CORS_ALLOWED_ORIGINS env var to a comma list to lock down in production.
-# "*" is safe here because all endpoints require auth tokens for writes;
-# the prediction endpoints are read-only ML inference.
-_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "*")
-if _cors_env.strip() == "*":
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
-    logging.info("[CORS] Allowing all origins (*)")
-else:
-    allowed_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
-    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
-    logging.info("[CORS] Allowed origins: %s", allowed_origins)
+# CORS — default to localhost for safety; override via CORS_ALLOWED_ORIGINS.
+_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+allowed_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+origins = "*" if allowed_origins == ["*"] else allowed_origins
+CORS(app, resources={r"/api/*": {"origins": origins}})
+logging.info("[CORS] Allowed origins: %s", origins)
 
 app.register_blueprint(upload_bp)
 app.register_blueprint(aqi_image_bp)
