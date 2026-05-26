@@ -1,0 +1,22 @@
+Test Accuracy: 0.8289
+
+                                precision    recall  f1-score   support
+
+                          Good     0.7698    0.8362    0.8017       232
+                      Moderate     0.8309    0.7257    0.7748       237
+Unhealthy for Sensitive Groups     0.6954    0.8814    0.7774       430
+                     Unhealthy     0.9925    0.6751    0.8036       394
+                Very Unhealthy     0.9352    0.9182    0.9266       330
+                        Severe     0.8653    0.9725    0.9158       218
+
+                      accuracy                         0.8289      1841
+                     macro avg     0.8482    0.8349    0.8333      1841
+                  weighted avg     0.8489    0.8289    0.8289      1841
+
+Confusion Matrix:
+[[194  19  16   0   0   3]
+ [ 26 172  39   0   0   0]
+ [ 22   6 379   1  11  11]
+ [  6  10  99 266   8   5]
+ [  2   0  11   0 303  14]
+ [  2   0   1   1   2 212]]

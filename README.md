@@ -73,6 +73,12 @@ The output is written to `IMAGE_AQI/models/aqi_image_model.tflite`.
 
 Use the saved model and class names in `IMAGE_AQI/models/` for prediction.
 
+### Integration Notes
+
+- Backend endpoint: `POST /api/aqi-image/predict` (form-data field: `image`).
+- Client should send raw image bytes; preprocessing happens inside the model graph.
+- The class label mapping is stored in `IMAGE_AQI/models/aqi_image_class_names.json`.
+
 ### Packaged Outputs
 
 A convenience bundle is available at `IMAGE_AQI/aqi_image_outputs.zip` containing the model and results.
