@@ -1,0 +1,21 @@
+{
+  "best_model": "RandomForest",
+  "target_col": "main_aqi",
+  "feature_cols": [
+    "components_co",
+    "components_no2",
+    "components_so2",
+    "components_o3",
+    "components_pm2_5",
+    "components_pm10"
+  ],
+  "label_map": {
+    "1": "Good",
+    "2": "Fair",
+    "3": "Moderate",
+    "4": "Poor",
+    "5": "Very Poor"
+  },
+  "selection_metric": "macro_f1",
+  "api_family": "open-meteo"
+}

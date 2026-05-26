@@ -7,6 +7,7 @@ logging.basicConfig(level=logging.INFO)
 from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
+from routes.aqi_image_routes import aqi_image_bp
 from asgiref.wsgi import WsgiToAsgi
 from routes.upload_routes import upload_bp
 from routes.predict_routes import predict_bp
@@ -32,6 +33,7 @@ else:
     logging.info("[CORS] Allowed origins: %s", allowed_origins)
 
 app.register_blueprint(upload_bp)
+app.register_blueprint(aqi_image_bp)
 app.register_blueprint(predict_bp)
 app.register_blueprint(admin_bp)
 
