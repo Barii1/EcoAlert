@@ -119,8 +119,8 @@ class ReportConfirmationScreen extends StatelessWidget {
                       // Body Text
                       Text(
                         isPremium
-                            ? 'Thank you for helping your community. Our AI has analyzed your report and Premium geo-alerts are sending warnings to nearby users (demo).'
-                            : 'Thank you for helping your community. Our AI has analyzed your report (demo). Upgrade to Premium to trigger geo-based warnings and priority notifications.',
+                            ? 'Thank you for helping your community. Our AI has analyzed your report and Premium geo-alerts are notifying nearby users.'
+                            : 'Thank you for helping your community. Our AI has analyzed your report. Upgrade to Premium for geo-based warnings and priority notifications.',
                         style: TextStyle(
                           fontSize: 15,
                           color: Colors.white.withOpacity(0.7),
@@ -129,83 +129,118 @@ class ReportConfirmationScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 40),
-                      // AI Analysis (Demo)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF152a2a),
-                          border: Border.all(
-                            color: const Color(0xFF2a4a4a),
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'AI Analysis (Demo)',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                      // Contextual analysis (sensor data when available; otherwise explicit estimates)
+                      Builder(
+                        builder: (context) {
+                          final r = latestReport;
+                          final smogReport = hazardType.toString().toLowerCase().contains('smog') ||
+                              hazardType.toString().toLowerCase().contains('aqi');
+                          final hasSensorAqi = r != null && r.aqi > 0;
+                          final title = (smogReport && hasSensorAqi)
+                              ? 'Regional air quality (sensors)'
+                              : (hasSensorAqi
+                                  ? 'Environmental context'
+                                  : 'Hazard analysis');
+                          final detailLine = r == null
+                              ? 'No report data loaded yet.'
+                              : !hasSensorAqi
+                                  ? 'AQI and model confidence are not inferred for this hazard type on the device. '
+                                      'Submit a Smog / AQI report to attach the latest regional sensor snapshot when available.'
+                                  : () {
+                                      final pol = r.mainPollutant.isNotEmpty
+                                          ? r.mainPollutant
+                                          : 'pollutant mix';
+                                      final confText = r.confidence > 0
+                                          ? '${(r.confidence * 100).round()}% (model)'
+                                          : 'model confidence not available — sensor snapshot only, not verified for your photos';
+                                      return 'AQI: ${r.aqi} • $pol • $confText';
+                                    }();
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF152a2a),
+                              border: Border.all(
+                                color: const Color(0xFF2a4a4a),
                               ),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              latestReport == null
-                                  ? 'AQI: --'
-                                  : 'AQI: ${latestReport.aqi} • ${latestReport.mainPollutant} • ${(latestReport.confidence * 100).round()}% confidence',
-                              style: const TextStyle(
-                                color: Color(0xFF06e0e0),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              isPremium
-                                  ? 'Geo-warning delivery: ENABLED'
-                                  : 'Geo-warning delivery: LOCKED (Premium)',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.75),
-                              ),
-                            ),
-                            if (!isPremium) ...[
-                              const SizedBox(height: 10),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0f2323),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.06),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
                                   ),
                                 ),
-                                child: const Row(
-                                  children: [
-                                    Icon(
-                                      Icons.notifications_active,
-                                      color: Color(0xFF06e0e0),
-                                      size: 18,
+                                const SizedBox(height: 8),
+                                Text(
+                                  detailLine,
+                                  style: const TextStyle(
+                                    color: Color(0xFF06e0e0),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (smogReport && hasSensorAqi) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Estimated from public sensor feeds (for example WAQI), not from on-device image classification.',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.75),
+                                      fontSize: 12,
                                     ),
-                                    SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        'Instant geo alerts to nearby users',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                  ),
+                                ],
+                                const SizedBox(height: 6),
+                                Text(
+                                  isPremium
+                                      ? 'Geo-warning delivery: ENABLED'
+                                      : 'Geo-warning delivery: LOCKED (Premium)',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.75),
+                                  ),
+                                ),
+                                if (!isPremium) ...[
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0f2323),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.06),
                                       ),
                                     ),
-                                    Icon(Icons.lock, color: Colors.white54, size: 18),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(
+                                          Icons.notifications_active,
+                                          color: Color(0xFF06e0e0),
+                                          size: 18,
+                                        ),
+                                        SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            'Instant geo alerts to nearby users',
+                                            style: TextStyle(
+                                              color: Colors.white70,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        Icon(Icons.lock, color: Colors.white54, size: 18),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 18),
                       // Report Summary Card

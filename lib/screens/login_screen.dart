@@ -1,45 +1,41 @@
+import 'package:ecoalert/widgets/mountain_logo.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 import 'package:provider/provider.dart';
+
 import '../config/app_colors.dart';
 import '../providers/auth_provider.dart';
-import '../widgets/app_logo.dart';
+import '../widgets/ea_field.dart';
+import '../widgets/sso_button.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final VoidCallback? onSuccess;
+  final VoidCallback? onRegister;
+  final Color accent;
+
+  const LoginScreen({
+    super.key,
+    this.onSuccess,
+    this.onRegister,
+    this.accent = AppColors.primary,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-
+class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
   final _formKey = GlobalKey<FormState>();
 
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _pulseAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-  }
+  bool _obscurePassword = true;
+  bool _remember = true;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -79,30 +75,25 @@ class _LoginScreenState extends State<LoginScreen>
     if (form != null && !form.validate()) return;
 
     try {
-      await context.read<AuthProvider>().firebaseLogin(
+      final authProvider = context.read<AuthProvider>();
+      await authProvider.login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
+
       if (!mounted) return;
-      final authProvider = context.read<AuthProvider>();
       if (authProvider.isAdmin) {
         Navigator.pushReplacementNamed(context, '/admin');
+      } else if (widget.onSuccess != null) {
+        widget.onSuccess!.call();
       } else {
         Navigator.pushReplacementNamed(context, '/navigation');
       }
-    } on FirebaseAuthException catch (e) {
-      String message = 'Login failed. Please try again.';
-      if (e.code == 'user-not-found') {
-        message = 'No account found with this email.';
-      } else if (e.code == 'wrong-password') {
-        message = 'Incorrect password.';
-      } else if (e.code == 'invalid-email') {
-        message = 'Invalid email address.';
-      }
+    } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Text(e.message),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -119,120 +110,75 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  Future<void> _handleGoogleLogin() async {
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.signInWithGoogle();
+    if (!mounted) return;
+
+    if (success) {
+      if (authProvider.isAdmin) {
+        Navigator.pushReplacementNamed(context, '/admin');
+      } else if (widget.onSuccess != null) {
+        widget.onSuccess!.call();
+      } else {
+        Navigator.pushReplacementNamed(context, '/navigation');
+      }
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(authProvider.errorMessage ?? 'Google sign-in failed'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final VoidCallback registerAction =
+        widget.onRegister ?? () => Navigator.pushNamed(context, '/signup');
 
     return Scaffold(
-      backgroundColor: AppColors.bgSecondary,
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Pulsing Logo
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _pulseAnimation.value,
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withOpacity(0.3),
-                              blurRadius: 30,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                        child: const Center(
-                          child: AppLogo(
-                            size: 56,
-                            showText: false,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 40),
-
-                const Text(
-                  'EcoAlert',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sign in to stay safe and informed',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                // Show connection mode
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: authProvider.isUsingFirebase
-                        ? Colors.green.withOpacity(0.15)
-                        : Colors.orange.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    authProvider.isUsingFirebase ? '🟢 Firebase Connected' : '🟠 Demo Mode',
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _BrandHeader(accent: widget.accent, authProvider: authProvider),
+                  const SizedBox(height: 40),
+                  const Text(
+                    'Sign in',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: authProvider.isUsingFirebase ? Colors.green[300] : Colors.orange[300],
-                      fontSize: 11,
+                      color: AppColors.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-                const SizedBox(height: 36),
-
-                // Basic email/password login
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.bgCard,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
-                          ),
-                        ),
-                        child: TextFormField(
+                  const SizedBox(height: 30),
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        EAField(
+                          label: 'EMAIL',
                           controller: _emailController,
+                          hint: 'you@agency.gov',
                           keyboardType: TextInputType.emailAddress,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'Email address',
-                            hintStyle:
-                                TextStyle(color: Colors.grey[500]),
-                            prefixIcon: Icon(
-                              Icons.email_outlined,
-                              color: Colors.grey[400],
-                            ),
-                            border: InputBorder.none,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 16),
-                          ),
+                          autofillHint: AutofillHints.email,
+                          errorText: null,
+                          accent: widget.accent,
+                          onChanged: (_) {},
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Please enter your email';
@@ -243,45 +189,30 @@ class _LoginScreenState extends State<LoginScreen>
                             return null;
                           },
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.bgCard,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
-                          ),
-                        ),
-                        child: TextFormField(
+                        const SizedBox(height: 20),
+                        EAField(
+                          label: 'PASSWORD',
                           controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'Password',
-                            hintStyle:
-                                TextStyle(color: Colors.grey[500]),
-                            prefixIcon: Icon(
-                              Icons.lock_outline,
-                              color: Colors.grey[400],
+                          hint: '••••••••',
+                          obscure: _obscurePassword,
+                          autofillHint: AutofillHints.password,
+                          errorText: null,
+                          accent: widget.accent,
+                          suffix: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: AppColors.textSecondary,
+                              size: 20,
                             ),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                color: Colors.grey[400],
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                            border: InputBorder.none,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 16),
                           ),
+                          onChanged: (_) {},
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Please enter your password';
@@ -292,171 +223,310 @@ class _LoginScreenState extends State<LoginScreen>
                             return null;
                           },
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: authProvider.isLoading
-                              ? null
-                              : _handleEmailLogin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: authProvider.isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                  ),
-                                )
-                              : const Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _SquareToggle(
+                                  value: _remember,
+                                  accent: Colors.grey,
+                                  onChanged: (value) {
+                                    setState(() => _remember = value);
+                                  },
+                                ),
+                                const SizedBox(width: 10),
+                                GestureDetector(
+                                  onTap: () => setState(() => _remember = !_remember),
+                                  child: const Text(
+                                    'Stay signed in',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w300,
+                                    ),
                                   ),
                                 ),
+                              ],
+                            ),
+                            TextButton(
+                              onPressed: authProvider.isLoading
+                                  ? null
+                                  : _handleForgotPassword,
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.textSecondary,
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text(
+                                'Forgot password?',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w300,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      // Forgot Password
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: authProvider.isLoading
-                              ? null
-                              : () => _handleForgotPassword(),
+                        const SizedBox(height: 22),
+                        SizedBox(
+                          height: 52,
+                          child: TextButton(
+                            onPressed: authProvider.isLoading ? null : _handleEmailLogin,
+                            style: TextButton.styleFrom(
+                              backgroundColor: authProvider.isLoading
+                                  ? AppColors.borderSubtle
+                                  : Colors.grey[800],
+                              foregroundColor: AppColors.textInverse,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(8)),
+                              ),
+                              padding: EdgeInsets.zero,
+                            ).copyWith(
+                              overlayColor: WidgetStateProperty.all(
+                                Colors.white.withOpacity(0.08),
+                              ),
+                            ),
+                            child: authProvider.isLoading
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(AppColors.textInverse),
+                                    ),
+                                  )
+                                : const Text(
+                                    'SIGN IN',
+                                    style: TextStyle(
+                                      color: AppColors.textInverse,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        const _DividerLabel(label: 'OR CONTINUE WITH'),
+                        const SizedBox(height: 20),
+                        SsoButton(
+                          label: 'Continue with Google',
+                          icon: const Icon(
+                            Icons.g_mobiledata,
+                            color: Color(0xFF9E9E9E),
+                            size: 28,
+                          ),
+                          onTap: authProvider.isLoading ? null : _handleGoogleLogin,
+                        ),
+                        const SizedBox(height: 40),
+                        Center(
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 10,
+                            runSpacing: 8,
+                            children: [
+                              const Text(
+                                'New to EcoAlert?',
+                                style: TextStyle(
+                                  color: AppColors.textDisabled,
+                                  fontSize: 12,
+                                  letterSpacing: 0.5,
+                                  fontWeight: FontWeight.w300,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed:
+                                    authProvider.isLoading ? null : registerAction,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.textPrimary,
+                                  padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text(
+                                  'REGISTER NOW →',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Center(
                           child: Text(
-                            'Forgot Password?',
+                            'V 4.2.1 · STATION #ECO-2046',
                             style: TextStyle(
-                              color: AppColors.primary.withOpacity(0.8),
-                              fontSize: 13,
+                              color: AppColors.textDisabled,
+                              fontSize: 10,
+                              letterSpacing: 1.6,
+                              fontWeight: FontWeight.w200,
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextButton(
-                        onPressed: authProvider.isLoading
-                            ? null
-                            : () {
-                                Navigator.pushNamed(context, '/signup');
-                              },
-                        child: const Text(
-                          'Create a new account',
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-                Text(
-                  'Or use a quick demo role',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 13,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: authProvider.isLoading
-                        ? null
-                        : () async {
-                            await authProvider.demoBasicLogin();
-                            if (!context.mounted) return;
-                            Navigator.pushReplacementNamed(
-                                context, '/navigation');
-                          },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF002E20),
-                      side: BorderSide(
-                        color: const Color(0xFF002E20).withOpacity(0.4),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Login as User',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: authProvider.isLoading
-                        ? null
-                        : () async {
-                            await authProvider.demoPremiumLogin();
-                            if (!context.mounted) return;
-                            Navigator.pushReplacementNamed(
-                                context, '/navigation');
-                          },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF002E20),
-                      side: BorderSide(
-                        color: const Color(0xFF002E20).withOpacity(0.4),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Login as Premium User',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: authProvider.isLoading
-                        ? null
-                        : () async {
-                            await authProvider.demoAdminLogin();
-                            if (!context.mounted) return;
-                            Navigator.pushReplacementNamed(context, '/admin');
-                          },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange,
-                      side: BorderSide(color: Colors.orange.withOpacity(0.5)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Login as Admin',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BrandHeader extends StatelessWidget {
+  final Color accent;
+  final AuthProvider authProvider;
+
+  const _BrandHeader({required this.accent, required this.authProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const MountainLogo(width: 176),
+        const SizedBox(height: 14),
+        const Text(
+          'ECOALERT',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 8,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'predict ⋅ prepare ⋅ protect',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            letterSpacing: 2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: 40,
+          height: 2,
+          color: Colors.grey,
+        ),
+      ],
+    );
+  }
+}
+
+// ignore: unused_element
+class _AmbientOrb extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const _AmbientOrb({required this.color, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [color, Colors.transparent],
+        ),
+      ),
+    );
+  }
+}
+
+class _DividerLabel extends StatelessWidget {
+  final String label;
+
+  const _DividerLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(height: 1, color: AppColors.borderSubtle),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              letterSpacing: 2.0,
+              color: AppColors.textDisabled,
+              fontWeight: FontWeight.w300,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Container(height: 1, color: AppColors.borderSubtle),
+        ),
+      ],
+    );
+  }
+}
+
+class _SquareToggle extends StatelessWidget {
+  final bool value;
+  final Color accent;
+  final ValueChanged<bool> onChanged;
+
+  const _SquareToggle({
+    required this.value,
+    required this.accent,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: value ? accent : Colors.transparent,
+          border: Border.all(
+            color: value ? accent : AppColors.borderSubtle,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: value
+            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            : const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+// ignore: unused_element
+class _TinyDot extends StatelessWidget {
+  const _TinyDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 6,
+      height: 6,
+      decoration: const BoxDecoration(
+        color: AppColors.primary,
+        shape: BoxShape.circle,
       ),
     );
   }

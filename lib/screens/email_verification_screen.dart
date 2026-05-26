@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_text_styles.dart';
 
@@ -14,8 +14,8 @@ class EmailVerificationScreen extends StatefulWidget {
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
-  late Timer _verificationCheckTimer;
-  late Timer _resendCooldownTimer;
+  Timer? _verificationCheckTimer;
+  Timer? _resendCooldownTimer;
   int _resendCooldown = 0;
   bool _isChecking = false;
 
@@ -27,16 +27,17 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   @override
   void dispose() {
-    _verificationCheckTimer.cancel();
-    _resendCooldownTimer.cancel();
+    _verificationCheckTimer?.cancel();
+    _resendCooldownTimer?.cancel();
     super.dispose();
   }
 
   void _startVerificationCheck() {
-    // Check every 2 seconds if email is verified
-    _verificationCheckTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      await FirebaseAuth.instance.currentUser?.reload();
-      final isVerified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+    _verificationCheckTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      final client = Supabase.instance.client;
+      await client.auth.refreshSession();
+      final user = client.auth.currentUser;
+      final isVerified = user?.emailConfirmedAt != null;
       if (isVerified && mounted) {
         Navigator.pushReplacementNamed(context, '/navigation');
       }
@@ -47,7 +48,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     if (_resendCooldown > 0) return;
 
     try {
-      await FirebaseAuth.instance.currentUser?.sendEmailVerification();
+      await Supabase.instance.client.auth.resend(
+        type: OtpType.signup,
+        email: widget.email,
+      );
       setState(() => _resendCooldown = 60);
       _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (_resendCooldown > 0) {
@@ -79,8 +83,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   Future<void> _handleContinue() async {
     setState(() => _isChecking = true);
     try {
-      await FirebaseAuth.instance.currentUser?.reload();
-      final isVerified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+      final client = Supabase.instance.client;
+      await client.auth.refreshSession();
+      final user = client.auth.currentUser;
+      final isVerified = user?.emailConfirmedAt != null;
       if (!mounted) return;
       if (isVerified) {
         Navigator.pushReplacementNamed(context, '/navigation');
@@ -142,11 +148,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       color: primaryContainer.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(24),
                     ),
-                    child: Icon(
-                      Icons.mail_outline,
-                      size: 44,
-                      color: primary,
-                    ),
+                    child: const Icon(Icons.mail_outline, size: 44, color: primary),
                   ),
                   const SizedBox(height: 32),
                   Text(
@@ -190,7 +192,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                               ),
                             )
                           : Text(
-                              'I\'ve Verified, Continue',
+                              "I've Verified, Continue",
                               style: AppTextStyles.headline.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w800,
@@ -207,10 +209,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       onPressed: _resendCooldown > 0 ? null : _handleResendEmail,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: primary,
-                        side: BorderSide(
-                          color: primary.withOpacity(0.3),
-                          width: 1.5,
-                        ),
+                        side: BorderSide(color: primary.withOpacity(0.3), width: 1.5),
                         shape: const StadiumBorder(),
                       ),
                       child: Text(

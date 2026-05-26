@@ -13,7 +13,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  final List<_AdminUserEntry> _allUsers = const [
+  final List<_AdminUserEntry> _allUsers = [
     _AdminUserEntry(
       name: 'Ahmed Malik',
       email: 'ahmed.m@gmail.com',
@@ -57,6 +57,204 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _showUserActions(_AdminUserEntry user, int index) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF162e2e),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF06e0e0).withOpacity(0.15),
+                  child: Text(
+                    (user.initials ?? user.name.substring(0, 2)).toUpperCase(),
+                    style: const TextStyle(color: Color(0xFF06e0e0), fontWeight: FontWeight.bold),
+                  ),
+                ),
+                title: Text(user.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text(user.email, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+              ),
+              const Divider(color: Colors.white12),
+              _actionTile(Icons.info_outline, 'View Profile', Colors.white70, () {
+                Navigator.pop(context);
+                _showProfileDialog(user);
+              }),
+              if (!user.isStaff) ...[
+                user.isSuspended
+                    ? _actionTile(Icons.check_circle_outline, 'Activate Account', Colors.green, () {
+                        setState(() => _allUsers[index].isSuspended = false);
+                        Navigator.pop(context);
+                        _snack('${user.name} activated');
+                      })
+                    : _actionTile(Icons.block, 'Suspend Account', Colors.orange, () {
+                        setState(() => _allUsers[index].isSuspended = true);
+                        Navigator.pop(context);
+                        _snack('${user.name} suspended');
+                      }),
+                _actionTile(Icons.delete_outline, 'Remove User', Colors.red, () {
+                  Navigator.pop(context);
+                  _confirmRemove(index);
+                }),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showProfileDialog(_AdminUserEntry user) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF162e2e),
+        title: Text(user.name, style: const TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _profileRow('Email', user.email),
+            _profileRow('Status', user.isSuspended ? 'Suspended' : (user.isStaff ? 'Staff' : user.status)),
+            _profileRow('Joined', user.timeAgo),
+            _profileRow('Role', user.isStaff ? 'Administrator' : 'User'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: Color(0xFF06e0e0))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Text('$label: ', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+          Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemove(int index) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF162e2e),
+        title: const Text('Remove User', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Remove "${_allUsers[index].name}" permanently?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              setState(() => _allUsers.removeAt(index));
+              Navigator.pop(context);
+              _snack('User removed');
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddUserDialog() {
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF162e2e),
+        title: const Text('Add User', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _dialogField(nameCtrl, 'Name'),
+            const SizedBox(height: 12),
+            _dialogField(emailCtrl, 'Email'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF06e0e0), foregroundColor: Colors.black),
+            onPressed: () {
+              final name = nameCtrl.text.trim();
+              final email = emailCtrl.text.trim();
+              if (name.isEmpty || email.isEmpty) return;
+              setState(() {
+                _allUsers.insert(0, _AdminUserEntry(
+                  name: name,
+                  email: email,
+                  status: 'Active',
+                  timeAgo: 'Just added',
+                  initials: name.length >= 2 ? name.substring(0, 2).toUpperCase() : name.toUpperCase(),
+                ));
+              });
+              Navigator.pop(ctx);
+              _snack('$name added');
+            },
+            child: const Text('Add', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dialogField(TextEditingController ctrl, String label) {
+    return TextField(
+      controller: ctrl,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white60),
+        filled: true,
+        fillColor: const Color(0xFF0f2323),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+    );
+  }
+
+  Widget _actionTile(IconData icon, String label, Color color, VoidCallback onTap) {
+    return ListTile(
+      leading: Icon(icon, color: color),
+      title: Text(label, style: TextStyle(color: color)),
+      onTap: onTap,
+    );
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)),
+    );
   }
 
   List<_AdminUserEntry> get _filteredUsers {
@@ -116,24 +314,23 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                       ),
                     ),
                   ),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF06e0e0),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF06e0e0).withOpacity(0.3),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.person_add,
-                      color: Color(0xFF0f2323),
-                      size: 24,
+                  GestureDetector(
+                    onTap: _showAddUserDialog,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF06e0e0),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF06e0e0).withOpacity(0.3),
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.person_add, color: Color(0xFF0f2323), size: 24),
                     ),
                   ),
                 ],
@@ -305,24 +502,11 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                         ),
                       )
                     else
-                      ..._filteredUsers.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final user = entry.value;
+                      ..._filteredUsers.map((user) {
+                        final realIndex = _allUsers.indexOf(user);
                         return Padding(
-                          padding: EdgeInsets.only(
-                            bottom: index == _filteredUsers.length - 1 ? 0 : 12,
-                          ),
-                          child: _buildUserCard(
-                            name: user.name,
-                            email: user.email,
-                            status: user.status,
-                            statusColor: user.statusColor,
-                            timeAgo: user.timeAgo,
-                            initials: user.initials,
-                            gradientColors: user.gradientColors,
-                            isSuspended: user.isSuspended,
-                            isStaff: user.isStaff,
-                          ),
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildUserCard(user, realIndex),
                         );
                       }),
                   ],
@@ -389,17 +573,8 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
     );
   }
 
-  Widget _buildUserCard({
-    required String name,
-    required String email,
-    required String status,
-    required Color statusColor,
-    required String timeAgo,
-    String? initials,
-    List<Color>? gradientColors,
-    bool isSuspended = false,
-    bool isStaff = false,
-  }) {
+  Widget _buildUserCard(_AdminUserEntry user, int realIndex) {
+    final statusColor = user.statusColor;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -414,37 +589,27 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              gradient: gradientColors != null
+              gradient: user.gradientColors != null
                   ? LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: gradientColors,
+                      colors: user.gradientColors!,
                     )
                   : null,
-              color: gradientColors == null
-                  ? (isSuspended ? Colors.grey[700] : Colors.grey[200])
+              color: user.gradientColors == null
+                  ? (user.isSuspended ? Colors.grey[700] : Colors.grey[200])
                   : null,
               shape: BoxShape.circle,
             ),
-            child: isSuspended
-                ? Icon(
-                    Icons.person_off,
-                    color: Colors.grey[400],
-                    size: 24,
-                  )
-                : isStaff
-                    ? Icon(
-                        Icons.verified_user,
-                        color: Colors.white,
-                        size: 24,
-                      )
+            child: user.isSuspended
+                ? Icon(Icons.person_off, color: Colors.grey[400], size: 24)
+                : user.isStaff
+                    ? const Icon(Icons.verified_user, color: Colors.white, size: 24)
                     : Center(
                         child: Text(
-                          initials ?? name.substring(0, 2).toUpperCase(),
+                          (user.initials ?? user.name.substring(0, 2)).toUpperCase(),
                           style: TextStyle(
-                            color: gradientColors != null
-                                ? Colors.white
-                                : Colors.grey[600],
+                            color: user.gradientColors != null ? Colors.white : Colors.grey[600],
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -458,9 +623,9 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  name,
+                  user.name,
                   style: TextStyle(
-                    color: isSuspended ? Colors.grey[300] : Colors.white,
+                    color: user.isSuspended ? Colors.grey[300] : Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
@@ -469,92 +634,44 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  email,
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
-                  ),
+                  user.email,
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    if (status == 'Active')
+                    if (user.isSuspended)
                       Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      )
-                    else if (status == 'STAFF')
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: statusColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(
-                          status,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: Text('SUSPENDED',
+                            style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
                       )
-                    else if (isSuspended)
+                    else if (user.isStaff)
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: statusColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(
-                          'SUSPENDED',
-                          style: TextStyle(
-                            color: statusColor,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: Text('STAFF',
+                            style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                      )
+                    else
+                      Container(
+                        width: 6, height: 6,
+                        decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
                       ),
-                    if (status == 'Active' || status == 'Offline') ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        '$status • $timeAgo',
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 10,
-                        ),
-                      ),
-                    ] else if (!isSuspended && status != 'STAFF') ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        timeAgo,
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 10,
-                        ),
-                      ),
-                    ] else if (status == 'STAFF') ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        timeAgo,
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
+                    const SizedBox(width: 6),
+                    Text(
+                      user.isSuspended || user.isStaff ? user.timeAgo : '${user.status} • ${user.timeAgo}',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                    ),
                   ],
                 ),
               ],
@@ -563,7 +680,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
           // More Button
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.grey, size: 20),
-            onPressed: () {},
+            onPressed: () => _showUserActions(user, realIndex),
           ),
         ],
       ),
@@ -623,7 +740,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
 }
 
 class _AdminUserEntry {
-  const _AdminUserEntry({
+  _AdminUserEntry({
     required this.name,
     required this.email,
     required this.status,
@@ -640,7 +757,7 @@ class _AdminUserEntry {
   final String timeAgo;
   final String? initials;
   final List<Color>? gradientColors;
-  final bool isSuspended;
+  bool isSuspended;
   final bool isStaff;
 
   Color get statusColor {

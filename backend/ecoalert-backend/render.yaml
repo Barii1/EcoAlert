@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ecoalert-backend
+    runtime: python
+    rootDir: backend/ecoalert-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: FLASK_DEBUG
+        value: "0"
+    healthCheckPath: /health

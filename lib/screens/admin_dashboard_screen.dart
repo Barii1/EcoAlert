@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
 import '../config/city_mappings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/report_provider.dart';
 import '../models/hazard_report_model.dart';
+import '../main.dart' show MainNavigationScreen;
 import 'admin_report_management_screen.dart';
 import 'admin_user_management_screen.dart';
 import 'admin_content_management_screen.dart';
 import 'admin_system_settings_screen.dart';
-
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -237,14 +237,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     });
 
     try {
-      await FirebaseFirestore.instance.collection('alerts').add({
+      await Supabase.instance.client.from('alerts').insert({
         'type': 'emergency',
         'title': title,
         'description': description,
-        'city': city,
-        'timestamp': FieldValue.serverTimestamp(),
-        'severity': 'CRITICAL',
-        'isActive': true,
+        'city': city.toLowerCase(),
+        'timestamp': DateTime.now().toIso8601String(),
+        'severity': 'critical',
+        'is_active': true,
+        'location': city,
+        'action_text': 'View Details',
       });
 
       if (!mounted) return;
@@ -343,78 +345,78 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             // Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.bgSecondary.withOpacity(0.8),
+              decoration: const BoxDecoration(
+                color: AppColors.bgSecondary,
                 border: Border(
-                  bottom: BorderSide(
-                    color: AppColors.textPrimary.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  bottom: BorderSide(color: AppColors.borderSubtle, width: 1),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.2),
-                      shape: BoxShape.circle,
+                      color: AppColors.warning.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: AppColors.primary.withOpacity(0.3),
-                        width: 2,
-                      ),
+                          color: AppColors.warning.withOpacity(0.3)),
                     ),
                     child: const Icon(
-                      Icons.person,
-                      color: AppColors.primary,
-                      size: 24,
+                      Icons.admin_panel_settings_rounded,
+                      color: AppColors.warning,
+                      size: 20,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Welcome back,',
+                        const Text(
+                          'ADMIN PANEL',
                           style: TextStyle(
                             color: AppColors.textSecondary,
-                            fontSize: 13,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
                           ),
                         ),
                         Text(
-                          'Administrator',
-                          style: TextStyle(
+                          authProvider.currentUser?.username ?? 'Administrator',
+                          style: const TextStyle(
                             color: AppColors.textPrimary,
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.notifications_outlined),
-                        color: AppColors.textSecondary,
-                        onPressed: () {},
-                      ),
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: AppColors.danger,
-                            shape: BoxShape.circle,
-                          ),
+                  // View as user button
+                  Tooltip(
+                    message: 'View User App',
+                    child: IconButton(
+                      icon: const Icon(Icons.phone_android_rounded,
+                          color: AppColors.primary),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const _UserAppView(),
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+                  // Logout
+                  Tooltip(
+                    message: 'Log Out',
+                    child: IconButton(
+                      icon: const Icon(Icons.logout_rounded,
+                          color: AppColors.danger),
+                      onPressed: () => _confirmLogout(context, authProvider),
+                    ),
                   ),
                 ],
               ),
@@ -609,6 +611,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Model Status button ──────────────────────────────
+                    _buildQuickAccessButton(
+                      icon: Icons.psychology_rounded,
+                      label: '🤖  Model Status — Live ML Diagnostics',
+                      onTap: () => Navigator.pushNamed(context, '/model-status'),
                     ),
                     const SizedBox(height: 24),
 
@@ -857,19 +867,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.orange.withOpacity(0.3)),
                 ),
                 child: const Text(
-                  'HIGH PRIORITY',
+                  'PENDING',
                   style: TextStyle(
                     color: Colors.orange,
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
@@ -1120,5 +1132,69 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } else {
       return '${difference.inDays}d ago';
     }
+  }
+
+  void _confirmLogout(BuildContext context, AuthProvider auth) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text(
+          'Log Out',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: const Text(
+          'Sign out of the admin panel?',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              final nav = Navigator.of(context);
+              Navigator.pop(context);
+              await auth.logout();
+              nav.pushNamedAndRemoveUntil('/login', (route) => false);
+            },
+            child: const Text(
+              'Log Out',
+              style: TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UserAppView extends StatelessWidget {
+  const _UserAppView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bgSecondary,
+      appBar: AppBar(
+        backgroundColor: AppColors.bgSecondary,
+        foregroundColor: AppColors.textPrimary,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back to Admin',
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'User App Preview',
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+        ),
+        centerTitle: true,
+      ),
+      body: const MainNavigationScreen(),
+    );
   }
 }

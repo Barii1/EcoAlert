@@ -54,11 +54,13 @@ class WeatherForecastWidget extends StatelessWidget {
     required this.isLoading,
     required this.currentWeather,
     this.showCachedBadge = false,
+    this.onRetry,
   });
 
   final bool isLoading;
   final WeatherCondition? currentWeather;
   final bool showCachedBadge;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -139,9 +141,21 @@ class WeatherForecastWidget extends StatelessWidget {
         border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Center(
-        child: Text(
-          'Forecast unavailable',
-          style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Forecast unavailable',
+              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: AppSpacing.p8),
+              TextButton(
+                onPressed: onRetry,
+                child: const Text('Retry'),
+              ),
+            ],
+          ],
         ),
       ),
     );

@@ -436,12 +436,16 @@ class _AlertCard extends StatelessWidget {
                             Icon(Icons.schedule,
                                 size: 12, color: AppColors.textSecondary),
                             const SizedBox(width: 4),
-                            Text(
-                              alert.timeLabel,
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
+                            Flexible(
+                              child: Text(
+                                alert.timeLabel,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 8),

@@ -26,14 +26,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final isGeneral = auth.currentRole == UserRole.general;
-    final isPremium = auth.currentRole == UserRole.premium;
-    final isBasic = auth.currentRole == UserRole.registered;
+    final isAdmin = auth.isAdmin;
+    final isGeneral = !isAdmin && auth.currentRole == UserRole.general;
+    final isPremium = !isAdmin && auth.currentRole == UserRole.premium;
+    final isBasic = !isAdmin && auth.currentRole == UserRole.registered;
     final displayName = auth.currentUser?.username ?? 'Guest User';
 
-    final membershipLabel = isGeneral
-        ? 'Guest'
-        : (isPremium ? 'Premium' : 'Basic');
+    final membershipLabel = isAdmin
+        ? 'Admin'
+        : isGeneral
+            ? 'Guest'
+            : (isPremium ? 'Premium' : 'Basic');
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -192,6 +195,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
+                  // Admin shortcut — visible when isAdmin is true
+                  if (isAdmin)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: GestureDetector(
+                        onTap: () => Navigator.pushNamed(context, '/admin'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                                color: AppColors.warning.withOpacity(0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: AppColors.warning.withOpacity(0.18),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                    Icons.admin_panel_settings_rounded,
+                                    color: AppColors.warning,
+                                    size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Admin Dashboard',
+                                      style: TextStyle(
+                                        color: AppColors.warning,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Manage reports, alerts & broadcasts',
+                                      style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 11,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.arrow_forward_ios_rounded,
+                                  size: 14, color: AppColors.warning),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (isAdmin) const SizedBox(height: 12),
+
                   Opacity(
                     opacity: isGeneral ? 0.6 : 1,
                     child: AbsorbPointer(
@@ -1085,11 +1151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       onPressed: () async {
                                         final auth = context.read<AuthProvider>();
                                         Navigator.pop(context);
-                                        if (auth.isFirebaseUser) {
-                                          await auth.firebaseLogout();
-                                        } else {
-                                          await auth.logout();
-                                        }
+                                        await auth.logout();
                                         if (!context.mounted) return;
                                         Navigator.pushNamedAndRemoveUntil(
                                           context,

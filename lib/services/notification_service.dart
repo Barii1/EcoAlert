@@ -1,7 +1,10 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'firestore_service.dart';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../config/app_navigator.dart';
 
 /// Top-level handler for background FCM messages (must be top-level function).
 @pragma('vm:entry-point')
@@ -76,20 +79,36 @@ class NotificationService {
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       debugPrint('[FCM] App opened from terminated via notification');
+      _navigateFromNotificationData(initialMessage.data);
     }
   }
 
-  /// Save the FCM token to Firestore for server-side targeting.
-  Future<void> saveFcmToken(String uid, FirestoreService firestoreService) async {
+  /// Save the FCM token to Supabase for server-side targeting.
+  Future<void> saveFcmToken(String uid) async {
     if (_fcmToken == null) return;
-    await firestoreService.saveFcmToken(uid, _fcmToken!);
-    debugPrint('[FCM] Token saved for user $uid');
+    try {
+      await Supabase.instance.client.from('fcm_tokens').upsert({
+        'user_id': uid,
+        'token': _fcmToken!,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      debugPrint('[FCM] Token saved for user $uid');
+    } catch (e) {
+      debugPrint('[FCM] Failed to save token: $e');
+    }
   }
 
-  /// Remove the FCM token from Firestore (on logout).
-  Future<void> removeFcmToken(String uid, FirestoreService firestoreService) async {
-    await firestoreService.removeFcmToken(uid);
-    debugPrint('[FCM] Token removed for user $uid');
+  /// Remove the FCM token from Supabase (on logout).
+  Future<void> removeFcmToken(String uid) async {
+    try {
+      await Supabase.instance.client
+          .from('fcm_tokens')
+          .delete()
+          .eq('user_id', uid);
+      debugPrint('[FCM] Token removed for user $uid');
+    } catch (e) {
+      debugPrint('[FCM] Failed to remove token: $e');
+    }
   }
 
   /// Subscribe to a topic (e.g., "flood_lahore", "aqi_lahore").
@@ -161,16 +180,65 @@ class NotificationService {
           icon: '@mipmap/ic_launcher',
         ),
       ),
+      payload: '/alerts',
     );
   }
 
   void _onMessageOpenedApp(RemoteMessage message) {
     debugPrint('[FCM] App opened from background via notification');
-    // TODO: Navigate to alert detail screen based on message data.
+    _navigateFromNotificationData(message.data);
   }
 
   void _onNotificationTap(NotificationResponse response) {
     debugPrint('[FCM] Local notification tapped: ${response.payload}');
-    // TODO: Navigate to alert detail screen based on payload.
+    _navigateFromNotificationPayload(response.payload);
+  }
+
+  /// Opens a relevant screen when the user taps a notification. Uses the
+  /// global [appNavigatorKey] because handlers run outside widget context.
+  void _navigateFromNotificationData(Map<String, dynamic> data) {
+    final nav = appNavigatorKey.currentState;
+    if (nav == null) return;
+
+    final rawRoute = data['route'] as String?;
+    final topic = (data['topic'] as String?) ?? (data['type'] as String?);
+
+    if (rawRoute != null && rawRoute.isNotEmpty) {
+      nav.pushNamedAndRemoveUntil(rawRoute, (r) => false);
+      return;
+    }
+
+    if (topic != null && topic.startsWith('aqi')) {
+      nav.pushNamedAndRemoveUntil('/navigation', (r) => false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        appNavigatorKey.currentState?.pushNamed('/aqi-detail');
+      });
+      return;
+    }
+
+    if (topic != null &&
+        (topic.contains('flood') || topic.contains('cloudburst'))) {
+      nav.pushNamedAndRemoveUntil('/navigation', (r) => false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        appNavigatorKey.currentState?.pushNamed('/flood-detail');
+      });
+      return;
+    }
+
+    nav.pushNamedAndRemoveUntil('/navigation', (r) => false);
+  }
+
+  void _navigateFromNotificationPayload(String? payload) {
+    if (payload != null && payload.isNotEmpty && payload.startsWith('/')) {
+      final nav = appNavigatorKey.currentState;
+      if (nav == null) return;
+      nav.pushNamedAndRemoveUntil('/navigation', (r) => false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        appNavigatorKey.currentState?.pushNamed(payload);
+      });
+      return;
+    }
+    appNavigatorKey.currentState
+        ?.pushNamedAndRemoveUntil('/navigation', (r) => false);
   }
 }

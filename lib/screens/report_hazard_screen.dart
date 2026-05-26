@@ -3,9 +3,15 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../config/app_colors.dart';
+import '../config/app_text_styles.dart';
 import '../models/user_model.dart';
+import '../providers/aqi_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/location_provider.dart';
 import '../providers/report_provider.dart';
+import '../widgets/app_background.dart';
+import '../widgets/app_card.dart';
 
 class ReportHazardScreen extends StatefulWidget {
   const ReportHazardScreen({super.key});
@@ -25,6 +31,11 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LocationProvider>().getCurrentLocation();
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final role = context.read<AuthProvider>().currentRole;
@@ -138,15 +149,36 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
     if (_isSubmitting) return;
 
     final auth = context.read<AuthProvider>();
+    final reading = context.read<AqiProvider>().current;
+    int? reportAqi;
+    String? reportPollutant;
+    double? reportConfidence;
+    if (_selectedHazard == 'Smog / AQI' && reading != null) {
+      reportAqi = reading.aqi;
+      reportPollutant = reading.dominantPollutantLabel;
+      reportConfidence = null;
+    }
+
     setState(() => _isSubmitting = true);
+    final location = context.read<LocationProvider>();
+    final locationLabel = location.currentArea.isNotEmpty
+      ? location.currentArea
+      : (auth.currentUser?.city ?? 'Unknown');
+    final pos = location.currentPosition;
+    final coords = pos == null
+      ? null
+      : '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
     final ok = await context.read<ReportProvider>().addReport(
           hazardType: _selectedHazard!,
           details: _detailsController.text,
           imageCount: _images.length,
-          locationLabel: 'Gulberg III, Lahore',
+        locationLabel: coords == null ? locationLabel : '$locationLabel ($coords)',
           reporterUid: auth.currentUser?.id ?? '',
           reporterName: auth.currentUser?.username ?? 'Anonymous',
           images: _images.isNotEmpty ? _images : null,
+          aqi: reportAqi,
+          mainPollutant: reportPollutant,
+          confidence: reportConfidence,
         );
     if (!mounted) return;
     setState(() => _isSubmitting = false);
@@ -176,328 +208,177 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final location = context.watch<LocationProvider>();
+    final locationLabel = location.currentArea.isNotEmpty
+        ? location.currentArea
+        : 'Location unavailable';
+    final pos = location.currentPosition;
+    final coordLabel = pos == null
+        ? 'Tap refresh to update'
+        : '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0f2323),
-      body: Column(
-        children: [
-          // App Bar
-          SafeArea(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.white.withOpacity(0.1),
-                    width: 1,
-                  ),
+      backgroundColor: AppColors.bgSecondary,
+      body: AppBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Report Hazard',
+                        style: AppTextStyles.headlinePrimary
+                            .copyWith(fontWeight: FontWeight.w700)),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.textPrimary),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Report Hazard',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Content
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Safety Warning
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    color: Colors.orange.withOpacity(0.1),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.warning,
-                          color: Colors.orange,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Ensure your safety before reporting. Do not put yourself in danger to capture evidence.',
-                            style: TextStyle(
-                              color: Colors.orange[200],
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Hazard Selector
-                        const Text(
-                          'What is happening?',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 1.3,
-                          ),
-                          itemCount: _hazardTypes.length,
-                          itemBuilder: (context, index) {
-                            final hazard = _hazardTypes.keys.elementAt(index);
-                            final icon = _hazardTypes[hazard]!;
-                            final isSelected = _selectedHazard == hazard;
-
-                            return InkWell(
-                              onTap: () {
-                                setState(() {
-                                  _selectedHazard = hazard;
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? const Color(0xFF06e0e0).withOpacity(0.1)
-                                      : const Color(0xFF162e2e),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? const Color(0xFF06e0e0)
-                                        : Colors.white.withOpacity(0.1),
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: isSelected
-                                      ? [
-                                          BoxShadow(
-                                            color: const Color(0xFF06e0e0)
-                                                .withOpacity(0.15),
-                                            blurRadius: 15,
-                                          ),
-                                        ]
-                                      : null,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AppCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                color: AppColors.warning, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Ensure your safety before reporting. Do not put yourself in danger to capture evidence.',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: AppColors.textSecondary,
+                                  height: 1.4,
                                 ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (isSelected)
-                                      Align(
-                                        alignment: Alignment.topRight,
-                                        child: Container(
-                                          width: 16,
-                                          height: 16,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF06e0e0),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.check,
-                                            size: 10,
-                                            color: Colors.black,
-                                          ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text('What is happening?',
+                          style: AppTextStyles.titleMedPrimary
+                              .copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.25,
+                        ),
+                        itemCount: _hazardTypes.length,
+                        itemBuilder: (context, index) {
+                          final hazard = _hazardTypes.keys.elementAt(index);
+                          final icon = _hazardTypes[hazard]!;
+                          final isSelected = _selectedHazard == hazard;
+
+                          return InkWell(
+                            onTap: () => setState(() => _selectedHazard = hazard),
+                            child: AppCard(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.topRight,
+                                    child: AnimatedOpacity(
+                                      opacity: isSelected ? 1 : 0,
+                                      duration: const Duration(milliseconds: 150),
+                                      child: Container(
+                                        width: 16,
+                                        height: 16,
+                                        decoration: const BoxDecoration(
+                                          color: AppColors.primary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.check,
+                                          size: 10,
+                                          color: Colors.white,
                                         ),
                                       ),
-                                    Icon(
-                                      icon,
-                                      size: 32,
-                                      color: isSelected
-                                          ? const Color(0xFF06e0e0)
-                                          : Colors.white.withOpacity(0.6),
                                     ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      hazard,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: isSelected
-                                            ? FontWeight.bold
-                                            : FontWeight.w500,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : Colors.white.withOpacity(0.7),
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                        // Evidence Section
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Evidence',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF06e0e0).withOpacity(0.1),
-                                border: Border.all(
-                                  color:
-                                      const Color(0xFF06e0e0).withOpacity(0.2),
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(
-                                    Icons.auto_awesome,
-                                    size: 12,
-                                    color: Color(0xFF06e0e0),
                                   ),
-                                  SizedBox(width: 4),
+                                  Icon(icon,
+                                      size: 30,
+                                      color: isSelected
+                                          ? AppColors.primary
+                                          : AppColors.textSecondary),
+                                  const SizedBox(height: 8),
                                   Text(
-                                    'AI VERIFIED',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF06e0e0),
+                                    hazard,
+                                    textAlign: TextAlign.center,
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: isSelected
+                                          ? AppColors.textPrimary
+                                          : AppColors.textSecondary,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        InkWell(
-                          onTap: _showImageSourceDialog,
-                          child: Container(
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Evidence',
+                              style: AppTextStyles.titleMedPrimary
+                                  .copyWith(fontWeight: FontWeight.w700)),
+                          Text('Optional',
+                              style: AppTextStyles.labelSecondary.copyWith(
+                                  letterSpacing: 0.6, fontSize: 10)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      InkWell(
+                        onTap: _showImageSourceDialog,
+                        child: AppCard(
+                          padding: const EdgeInsets.all(12),
+                          child: SizedBox(
                             height: 120,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF162e2e).withOpacity(0.5),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.2),
-                                width: 2,
-                                style: BorderStyle.solid,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
                             child: _images.isEmpty
                                 ? Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            width: 40,
-                                            height: 40,
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  Colors.white.withOpacity(0.1),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.camera_alt,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Camera',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white60,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      _iconTile(Icons.camera_alt, 'Camera'),
                                       const SizedBox(width: 24),
-                                      Container(
-                                        width: 1,
-                                        height: 40,
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                      const SizedBox(width: 24),
-                                      Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            width: 40,
-                                            height: 40,
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  Colors.white.withOpacity(0.1),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.image,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Gallery',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white60,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      _iconTile(Icons.image, 'Gallery'),
                                     ],
                                   )
                                 : ListView.builder(
                                     scrollDirection: Axis.horizontal,
-                                    padding: const EdgeInsets.all(8),
+                                    padding: const EdgeInsets.all(6),
                                     itemCount: _images.length + 1,
                                     itemBuilder: (context, index) {
                                       if (index == _images.length) {
                                         return Container(
                                           width: 80,
-                                          margin:
-                                              const EdgeInsets.only(left: 8),
+                                          margin: const EdgeInsets.only(left: 8),
                                           decoration: BoxDecoration(
                                             border: Border.all(
-                                              color:
-                                                  Colors.white.withOpacity(0.2),
+                                              color: AppColors.borderSubtle,
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(10),
                                           ),
                                           child: const Icon(
                                             Icons.add,
-                                            color: Colors.white60,
+                                            color: AppColors.textSecondary,
                                           ),
                                         );
                                       }
@@ -505,8 +386,7 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
                                         width: 80,
                                         margin: const EdgeInsets.only(right: 8),
                                         decoration: BoxDecoration(
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(10),
                                           image: DecorationImage(
                                             image: FileImage(_images[index]),
                                             fit: BoxFit.cover,
@@ -517,160 +397,116 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
                                   ),
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        // Location
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Location',
+                              style: AppTextStyles.titleMedPrimary
+                                  .copyWith(fontWeight: FontWeight.w700)),
+                          TextButton.icon(
+                            onPressed: location.isLoading
+                                ? null
+                                : () => location.getCurrentLocation(),
+                            icon: const Icon(Icons.my_location, size: 16),
+                            label: const Text('Refresh'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      AppCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
                           children: [
-                            const Text(
-                              'Location',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.near_me,
+                                  color: AppColors.primary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(locationLabel,
+                                      style: AppTextStyles.bodyPrimary.copyWith(
+                                          fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    coordLabel,
+                                    style: AppTextStyles.bodySmallSecondary,
+                                  ),
+                                ],
                               ),
                             ),
-                            TextButton(
-                              onPressed: () {},
-                              child: const Text(
-                                'Edit',
-                                style: TextStyle(
-                                  color: Color(0xFF06e0e0),
-                                  fontWeight: FontWeight.bold,
+                            if (location.isLoading)
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
                                 ),
                               ),
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        Container(
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF162e2e),
+                      ),
+                      const SizedBox(height: 20),
+                      Text('Details',
+                          style: AppTextStyles.titleMedPrimary
+                              .copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _detailsController,
+                        maxLines: 5,
+                        style: AppTextStyles.bodyPrimary,
+                        decoration: InputDecoration(
+                          hintText: 'Describe the severity or impact…',
+                          hintStyle: AppTextStyles.bodySmallSecondary,
+                          filled: true,
+                          fillColor: AppColors.bgCard,
+                          border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Stack(
-                            children: [
-                              Center(
-                                child: Icon(
-                                  Icons.location_on,
-                                  size: 36,
-                                  color: const Color(0xFF06e0e0),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF162e2e)
-                                        .withOpacity(0.9),
-                                    border: Border(
-                                      top: BorderSide(
-                                        color: Colors.white.withOpacity(0.1),
-                                      ),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.near_me,
-                                        size: 20,
-                                        color: Colors.white60,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      const Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Near Gulberg III, Lahore',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            Text(
-                                              'Lat: 31.5204, Long: 74.3587',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.white60,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        // Details
-                        const Text(
-                          'Details',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _detailsController,
-                          maxLines: 5,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'Describe the severity or impact...',
-                            hintStyle: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderSubtle,
                             ),
-                            filled: true,
-                            fillColor: const Color(0xFF162e2e),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.1),
-                              ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderSubtle,
                             ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.1),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF06e0e0),
-                                width: 2,
-                              ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.primary,
+                              width: 2,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 100),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
       floatingActionButton: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         width: double.infinity,
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF06e0e0),
-            foregroundColor: const Color(0xFF0f2323),
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -704,6 +540,29 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  Widget _iconTile(IconData icon, String label) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondary,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Icon(icon, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 6),
+        Text(label,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            )),
+      ],
     );
   }
 
