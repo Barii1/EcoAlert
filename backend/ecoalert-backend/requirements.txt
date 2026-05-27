@@ -1,4 +1,4 @@
-﻿flask==3.0.2
+flask==3.0.2
 flask-cors==4.0.0
 supabase==2.4.0
 firebase-admin==6.4.0
@@ -11,5 +11,6 @@ scikit-learn
 joblib
 pandas
 requests
+PyJWT
 uvicorn
 asgiref

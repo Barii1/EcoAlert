@@ -99,3 +99,52 @@ def log_upload(payload: dict) -> None:
 
 def log_audit(payload: dict) -> None:
     log_event("audit_logs", payload)
+
+
+# ── Auth helpers (Supabase equivalents of the old firestore_service functions) ──
+
+def report_belongs_to_user(report_id: str, uid: str) -> bool:
+    """Returns True if the report exists in Supabase and its reporter_uid matches uid."""
+    try:
+        result = (
+            _get_supabase()
+            .table("reports")
+            .select("reporter_uid")
+            .eq("id", report_id)
+            .single()
+            .execute()
+        )
+        return (result.data or {}).get("reporter_uid") == uid
+    except Exception:
+        return False
+
+
+def user_is_admin(uid: str) -> bool:
+    """Returns True if the user's profile has role='admin' in Supabase."""
+    try:
+        result = (
+            _get_supabase()
+            .table("profiles")
+            .select("role")
+            .eq("id", uid)
+            .single()
+            .execute()
+        )
+        return (result.data or {}).get("role") == "admin"
+    except Exception:
+        return False
+
+
+def update_report_image_urls(report_id: str, image_urls: list[str]) -> None:
+    """Writes image URLs and count back to the reports table."""
+    _get_supabase().table("reports").update({
+        "image_urls": image_urls,
+        "image_count": len(image_urls),
+    }).eq("id", report_id).execute()
+
+
+def update_user_profile_picture(uid: str, photo_url: str) -> None:
+    """Updates the user's photo_url in the profiles table."""
+    _get_supabase().table("profiles").update({
+        "photo_url": photo_url,
+    }).eq("id", uid).execute()

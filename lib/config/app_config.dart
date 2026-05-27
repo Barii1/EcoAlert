@@ -8,11 +8,11 @@ class AppConfig {
     'OPENWEATHER_API_KEY',
     defaultValue: '',
   );
-  // Backend base URL (override with --dart-define=UPLOAD_API_BASE_URL=...).
-  // Android emulator: use http://10.0.2.2:5000 instead of localhost.
+  // Backend base URL (override with --dart-define=UPLOAD_API_BASE_URL=https://your-deployed-url).
+  // Default 10.0.2.2 reaches host machine from Android emulator.
   static const String uploadApiBaseUrl = String.fromEnvironment(
     'UPLOAD_API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:5000',
+    defaultValue: 'http://10.0.2.2:5000',
   );
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',

@@ -7,8 +7,27 @@ import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/theme_provider.dart';
-import 'privacy_policy_screen.dart';
-import 'terms_conditions_screen.dart';
+import '../widgets/app_background.dart';
+import '../widgets/surface_card.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tier definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Guest (general)     → read-only, no personalization
+// Registered          → alerts + location, no health calibration
+// Premium             → all features: health calibration, geo-radius, AQI threshold
+
+// Available health conditions a user can self-select
+const _kAllConditions = [
+  'Asthma',
+  'COPD',
+  'Heart Condition',
+  'Diabetes',
+  'Elderly Care',
+  'Child Care',
+  'Hypertension',
+];
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -18,1211 +37,991 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _floodAlerts = true;
-  bool _smogAlerts = true;
-  double _aqiThreshold = 150;
-  String _location = 'Gulberg III, Lahore';
+  late List<String> _selectedConditions;
+  bool _savingConditions = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = context.read<AuthProvider>().currentUser;
+    _selectedConditions = List<String>.from(user?.healthConditions ?? []);
+  }
+
+  Future<void> _toggleCondition(String condition, AuthProvider auth) async {
+    final next = List<String>.from(_selectedConditions);
+    if (next.contains(condition)) {
+      next.remove(condition);
+    } else {
+      next.add(condition);
+    }
+    setState(() {
+      _selectedConditions = next;
+      _savingConditions = true;
+    });
+    await auth.updateHealthConditions(next);
+    if (mounted) setState(() => _savingConditions = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final isAdmin = auth.isAdmin;
-    final isGeneral = !isAdmin && auth.currentRole == UserRole.general;
-    final isPremium = !isAdmin && auth.currentRole == UserRole.premium;
-    final isBasic = !isAdmin && auth.currentRole == UserRole.registered;
-    final displayName = auth.currentUser?.username ?? 'Guest User';
+    final theme = context.watch<ThemeProvider>();
+    final user = auth.currentUser;
 
-    final membershipLabel = isAdmin
+    final isAdmin = auth.isAdmin;
+    final isGuest = !isAdmin && auth.currentRole == UserRole.general;
+    final isPremium = !isAdmin && auth.currentRole == UserRole.premium;
+    final isRegistered = !isAdmin && auth.currentRole == UserRole.registered;
+
+    final tierLabel = isAdmin
         ? 'Admin'
-        : isGeneral
+        : isGuest
             ? 'Guest'
-            : (isPremium ? 'Premium' : 'Basic');
+            : isPremium
+                ? 'Premium'
+                : 'Registered';
+
+    final tierColor = isAdmin
+        ? AppColors.warning
+        : isPremium
+            ? AppColors.info
+            : isGuest
+                ? AppColors.textSecondary
+                : AppColors.success;
 
     return Scaffold(
-      backgroundColor: AppColors.bgSecondary,
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // App Bar
-            SliverAppBar(
-              backgroundColor: AppColors.bgSecondary,
-              elevation: 0,
-              title: Text(
-                'Settings',
-                style: AppTextStyles.titleLarge.copyWith(color: AppColors.textPrimary),
-              ),
-              leading: IconButton(
-                icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
-                onPressed: () => Navigator.pop(context),
-              ),
-              centerTitle: true,
-            ),
-            // Content
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  // Profile Header
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        CircleAvatar(
-                          radius: 48,
-                          backgroundColor: AppColors.primary,
-                          child: Text(
-                            displayName.isNotEmpty
-                                ? displayName[0].toUpperCase()
-                                : 'U',
-                            style: AppTextStyles.displayLarge.copyWith(
-                              color: AppColors.textInverse,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          displayName,
-                          style: AppTextStyles.headline.copyWith(color: AppColors.textPrimary),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Customize your EcoAlert AI preferences',
-                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 12),
-                        if (isGeneral)
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.danger.withOpacity(0.08),
-                              border: Border.all(
-                                color: AppColors.danger.withOpacity(0.2),
-                                width: 1,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'Guest mode: reporting and preferences are disabled.',
-                              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        if (isGeneral) const SizedBox(height: 12),
-                        if (isBasic)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.bgCard,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.primary.withOpacity(0.2),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.workspace_premium,
-                                    color: AppColors.primary,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      'Upgrade to Premium to enable geo-based warnings and notifications.',
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.8),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (isPremium
-                                    ? AppColors.primary
-                                    : AppColors.danger)
-                                .withOpacity(0.1),
-                            border: Border.all(
-                              color: (isPremium
-                                      ? AppColors.primary
-                                      : AppColors.danger)
-                                  .withOpacity(0.2),
-                              width: 1,
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                isPremium
-                                    ? Icons.workspace_premium
-                                    : (isGeneral ? Icons.person_outline : Icons.verified_user),
-                                color: isPremium
-                                    ? AppColors.primary
-                                    : AppColors.danger,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                membershipLabel,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isPremium
-                                      ? AppColors.primary
-                                      : AppColors.danger,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Admin shortcut — visible when isAdmin is true
-                  if (isAdmin)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: GestureDetector(
-                        onTap: () => Navigator.pushNamed(context, '/admin'),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.warning.withOpacity(0.10),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                                color: AppColors.warning.withOpacity(0.4)),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppColors.warning.withOpacity(0.18),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(
-                                    Icons.admin_panel_settings_rounded,
-                                    color: AppColors.warning,
-                                    size: 20),
-                              ),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Admin Dashboard',
-                                      style: TextStyle(
-                                        color: AppColors.warning,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Manage reports, alerts & broadcasts',
-                                      style: TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 11,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.arrow_forward_ios_rounded,
-                                  size: 14, color: AppColors.warning),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (isAdmin) const SizedBox(height: 12),
+      backgroundColor: Colors.transparent,
+      body: AppBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildAppBar(context),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 60),
+                  children: [
+                    // ── Profile header ──────────────────────────────────────
+                    _buildProfileHeader(user, tierLabel, tierColor, isAdmin, context),
+                    const SizedBox(height: 20),
 
-                  Opacity(
-                    opacity: isGeneral ? 0.6 : 1,
-                    child: AbsorbPointer(
-                      absorbing: isGeneral,
-                      child: Column(
-                        children: [
-                          // Location Section
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'LOCATION',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textSecondary,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  decoration: InputDecoration(
-                                    hintText:
-                                        'Search City (e.g., Lahore, Karachi)',
-                                    hintStyle: const TextStyle(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 14,
-                                    ),
-                                    filled: true,
-                                    fillColor: AppColors.bgCard,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: AppColors.border,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: AppColors.border,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: AppColors.danger,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    suffixIcon: const Icon(
-                                      Icons.search,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          AppColors.danger,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    onPressed: () async {
-                                      final messenger = ScaffoldMessenger.of(context);
-                                      final loc = context.read<LocationProvider>();
-                                      await loc.getCurrentLocation();
-                                      if (!mounted) return;
-                                      setState(() => _location = loc.currentCity);
-                                      messenger.showSnackBar(
-                                        SnackBar(
-                                          content: Text('Location updated to ${loc.currentCity}'),
-                                          backgroundColor: AppColors.bgElevated,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
-                                    },
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(
-                                          Icons.my_location,
-                                          color: AppColors.textInverse,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Use Current Location',
-                                          style: AppTextStyles.label.copyWith(
-                                            color: AppColors.textInverse,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Current: $_location',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
+                    // ── Guest banner ─────────────────────────────────────────
+                    if (isGuest) ...[
+                      _guestBanner(),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // ── Admin shortcut ───────────────────────────────────────
+                    if (isAdmin) ...[
+                      _adminShortcut(context),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // ── Tier card ────────────────────────────────────────────
+                    if (!isAdmin) ...[
+                      _buildTierCard(isGuest, isRegistered, isPremium, tierColor, context),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // ── Location (Registered + Premium) ──────────────────────
+                    if (!isGuest) ...[
+                      _sectionLabel('Location'),
+                      const SizedBox(height: 10),
+                      _buildLocationCard(context),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // ── Health calibration (Premium only) ────────────────────
+                    _sectionLabel('AI Health Calibration'),
+                    const SizedBox(height: 10),
+                    isPremium || isAdmin
+                        ? _buildHealthCard(auth)
+                        : _buildLockedCard(
+                            icon: Icons.monitor_heart_rounded,
+                            title: 'Health Calibration',
+                            description:
+                                'Tell the app about your health conditions to receive '
+                                'personalised AQI warnings and smog alerts.',
+                            tier: 'Premium',
                           ),
-                          // Alert Preferences
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'ALERT PREFERENCES',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textSecondary,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  // Flood Alerts Toggle
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.bgCard,
-                                      border: Border.all(
-                                        color: AppColors.border,
-                                        width: 1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 40,
-                                          height: 40,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.blue.withOpacity(0.1),
-                                          ),
-                                          child: const Icon(
-                                            Icons.flood,
-                                            color: Colors.blue,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: const [
-                                              Text(
-                                                'Flood Alerts',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Monsoon & heavy rain warnings',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: AppColors.textSecondary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Switch(
-                                          value: _floodAlerts,
-                                          onChanged: (value) {
-                                            setState(() {
-                                              _floodAlerts = value;
-                                            });
-                                          },
-                                          activeColor: AppColors.danger,
-                                          inactiveThumbColor: Colors.white30,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  // Smog/AQI Toggle
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.bgCard,
-                                      border: Border.all(
-                                        color: AppColors.border,
-                                        width: 1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 40,
-                                          height: 40,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.grey.withOpacity(0.1),
-                                          ),
-                                          child: const Icon(
-                                            Icons.air,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: const [
-                                              Text(
-                                                'Smog & AQI Alerts',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Air quality warnings & health tips',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: AppColors.textSecondary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Switch(
-                                          value: _smogAlerts,
-                                          onChanged: (value) {
-                                            setState(() {
-                                              _smogAlerts = value;
-                                            });
-                                          },
-                                          activeColor: AppColors.danger,
-                                          inactiveThumbColor: Colors.white30,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text(
-                                        'AQI Threshold',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.danger
-                                              .withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          'High (>${_aqiThreshold.toInt()})',
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.danger,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Slider(
-                                    value: _aqiThreshold,
-                                    min: 0,
-                                    max: 300,
-                                    activeColor: AppColors.danger,
-                                    inactiveColor: AppColors.border,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _aqiThreshold = value;
-                                      });
-                                    },
-                                  ),
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Sensitive',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                        Text(
-                                          'Moderate',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                        Text(
-                                          'Hazardous',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ),
-                          // Health Calibration
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: const [
-                                    Text(
-                                      'AI HEALTH CALIBRATION',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textSecondary,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    Icon(
-                                      Icons.info_outline,
-                                      size: 14,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    _buildHealthChip('Asthma', true),
-                                    _buildHealthChip('Heart Condition', false),
-                                    _buildHealthChip('Elderly Care', false),
-                                    _buildHealthChip(
-                                      'Add Condition',
-                                      false,
-                                      isAdd: true,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'Health data is processed locally on-device to personalize alert thresholds.',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // System Settings
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'SYSTEM',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textSecondary,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                // Dark Mode Toggle
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.bgCard,
-                                    border: Border.all(
-                                      color: AppColors.border,
-                                      width: 1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.purple.withOpacity(0.1),
-                                        ),
-                                        child: const Icon(
-                                          Icons.dark_mode,
-                                          color: Colors.purple,
-                                          size: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      const Expanded(
-                                        child: Text(
-                                          'Dark Mode',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      Consumer<ThemeProvider>(
-                                        builder: (_, themeProvider, __) =>
-                                            Switch(
-                                          value: themeProvider.isDarkMode,
-                                          onChanged: (_) =>
-                                              themeProvider.toggleTheme(),
-                                          activeColor: AppColors.danger,
-                                          inactiveThumbColor: Colors.white30,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                // Test Alert Button
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: AppColors.bgCard,
-                                    border: Border.all(
-                                      color: AppColors.border,
-                                      width: 1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 4,
-                                    ),
-                                    leading: Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.green.withOpacity(0.1),
-                                      ),
-                                      child: const Icon(
-                                        Icons.notifications_active,
-                                        color: Colors.green,
-                                        size: 16,
-                                      ),
-                                    ),
-                                    title: const Text(
-                                      'Test Alert System',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    trailing: const Icon(
-                                      Icons.chevron_right,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    onTap: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Coming soon'),
-                                          duration: Duration(seconds: 1),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 24),
+
+                    // ── Appearance ───────────────────────────────────────────
+                    _sectionLabel('Appearance'),
+                    const SizedBox(height: 10),
+                    _buildSection([
+                      _ToggleTile(
+                        icon: theme.isDarkMode
+                            ? Icons.dark_mode_outlined
+                            : Icons.light_mode_outlined,
+                        title: 'Dark Mode',
+                        value: theme.isDarkMode,
+                        onChanged: (_) => theme.toggleTheme(),
                       ),
-                    ),
-                  ),
-                  // About & Support Section
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'ABOUT & SUPPORT',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Contact Us
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.bgCard,
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            leading: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: AppColors.primary.withOpacity(0.1),
-                              ),
-                              child: const Icon(
-                                Icons.mail,
-                                color: AppColors.primary,
-                                size: 16,
-                              ),
-                            ),
-                            title: const Text(
-                              'Contact Us',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.white,
-                              ),
-                            ),
-                            subtitle: const Text(
-                              'Get help and support',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.textSecondary,
-                            ),
-                            onTap: () {
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  backgroundColor: AppColors.bgCard,
-                                  title: const Text(
-                                    'Contact Us',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  content: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Email: support@ecoalert.pk',
-                                        style: TextStyle(color: Colors.white70),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      const Text(
-                                        'Phone: +92 300 1234567',
-                                        style: TextStyle(color: Colors.white70),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      const Text(
-                                        'Emergency Hotline: 1122',
-                                        style:
-                                            TextStyle(color: AppColors.danger),
-                                      ),
-                                    ],
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text(
-                                        'Close',
-                                        style:
-                                            TextStyle(color: AppColors.primary),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        // About
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.bgCard,
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            leading: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.blue.withOpacity(0.1),
-                              ),
-                              child: const Icon(
-                                Icons.info,
-                                color: Colors.blue,
-                                size: 16,
-                              ),
-                            ),
-                            title: const Text(
-                              'About EcoAlert',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.white,
-                              ),
-                            ),
-                            subtitle: const Text(
-                              'Version 1.0.0',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.textSecondary,
-                            ),
-                            onTap: () {
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  backgroundColor: AppColors.bgCard,
-                                  title: const Text(
-                                    'About EcoAlert',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  content: const Text(
-                                    'EcoAlert is an AI-powered environmental hazard prediction and alert system designed for Pakistan. We help communities stay safe by providing real-time alerts for floods, smog, heatwaves, and other environmental hazards.\n\nVersion: 1.0.0\nDeveloped with ❤️ for Pakistan',
-                                    style: TextStyle(
-                                        color: Colors.white70, height: 1.6),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text(
-                                        'Close',
-                                        style:
-                                            TextStyle(color: AppColors.primary),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        // Privacy Policy
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.bgCard,
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            leading: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.amber.withOpacity(0.1),
-                              ),
-                              child: const Icon(
-                                Icons.security,
-                                color: Colors.amber,
-                                size: 16,
-                              ),
-                            ),
-                            title: const Text(
-                              'Privacy Policy',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.white,
-                              ),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.textSecondary,
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const PrivacyPolicyScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        // Terms & Conditions
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.bgCard,
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            leading: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.orange.withOpacity(0.1),
-                              ),
-                              child: const Icon(
-                                Icons.description,
-                                color: Colors.orange,
-                                size: 16,
-                              ),
-                            ),
-                            title: const Text(
-                              'Terms & Conditions',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.white,
-                              ),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.textSecondary,
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const TermsConditionsScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Danger Zone
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'DANGER ZONE',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.05),
-                            border: Border.all(
-                              color: Colors.red.withOpacity(0.3),
-                              width: 1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            leading: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.red.withOpacity(0.1),
-                              ),
-                              child: const Icon(
-                                Icons.logout,
-                                color: Colors.red,
-                                size: 16,
-                              ),
-                            ),
-                            title: const Text(
-                              'Logout',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.red,
-                              ),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: Colors.red,
-                            ),
-                            onTap: () {
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  backgroundColor: AppColors.bgCard,
-                                  title: const Text(
-                                    'Logout',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  content: const Text(
-                                    'Are you sure you want to logout?',
-                                    style: TextStyle(color: Colors.white70),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text(
-                                        'Cancel',
-                                        style: TextStyle(color: Colors.white60),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () async {
-                                        final auth = context.read<AuthProvider>();
-                                        Navigator.pop(context);
-                                        await auth.logout();
-                                        if (!context.mounted) return;
-                                        Navigator.pushNamedAndRemoveUntil(
-                                          context,
-                                          '/login',
-                                          (route) => false,
-                                        );
-                                      },
-                                      child: const Text(
-                                        'Logout',
-                                        style: TextStyle(color: Colors.red),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    ]),
+                    const SizedBox(height: 24),
+
+                    // ── About & Support ──────────────────────────────────────
+                    _sectionLabel('About & Support'),
+                    const SizedBox(height: 10),
+                    _buildSection([
+                      _NavTile(
+                        icon: Icons.privacy_tip_outlined,
+                        title: 'Privacy Policy',
+                        onTap: () => Navigator.pushNamed(context, '/privacy'),
+                      ),
+                      _NavTile(
+                        icon: Icons.article_outlined,
+                        title: 'Terms & Conditions',
+                        onTap: () => Navigator.pushNamed(context, '/terms'),
+                      ),
+                      _InfoTile(
+                        icon: Icons.info_outline_rounded,
+                        title: 'App Version',
+                        value: '1.0.0',
+                      ),
+                      _NavTile(
+                        icon: Icons.mail_outline_rounded,
+                        title: 'Contact Support',
+                        subtitle: 'support@ecoalert.pk',
+                        onTap: () => _showContact(context),
+                        isLast: true,
+                      ),
+                    ]),
+                    const SizedBox(height: 24),
+
+                    // ── Sign out ─────────────────────────────────────────────
+                    if (auth.isAuthenticated) _buildSignOut(auth, context),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── App bar ────────────────────────────────────────────────────────────────
+
+  Widget _buildAppBar(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: const BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: AppColors.borderSubtle, width: 0.5)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_rounded,
+                color: AppColors.textPrimary),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 4),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Profile & Settings',
+                  style: AppTextStyles.headline
+                      .copyWith(color: AppColors.textPrimary)),
+              Text('Personalise your EcoAlert experience',
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textSecondary)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Profile header ─────────────────────────────────────────────────────────
+
+  Widget _buildProfileHeader(UserModel? user, String tierLabel, Color tierColor,
+      bool isAdmin, BuildContext context) {
+    final displayName =
+        user?.username.isNotEmpty == true ? user!.username : 'EcoAlert User';
+    final initial = displayName[0].toUpperCase();
+
+    return SurfaceCard(
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: tierColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: tierColor.withOpacity(0.25)),
+            ),
+            child: Center(
+              child: Text(initial,
+                  style: AppTextStyles.headline.copyWith(
+                      color: tierColor, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(displayName,
+                    style: AppTextStyles.titleLarge
+                        .copyWith(color: AppColors.textPrimary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                if (user?.email.isNotEmpty == true)
+                  Text(user!.email,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                if (user?.city.isNotEmpty == true) ...[
+                  const SizedBox(height: 2),
+                  Row(children: [
+                    const Icon(Icons.location_on_outlined,
+                        size: 11, color: AppColors.textDisabled),
+                    const SizedBox(width: 3),
+                    Text(user!.city,
+                        style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.textDisabled, fontSize: 11)),
+                  ]),
+                ],
+              ],
+            ),
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: tierColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: tierColor.withOpacity(0.3)),
+            ),
+            child: Text(tierLabel,
+                style: AppTextStyles.label
+                    .copyWith(color: tierColor, letterSpacing: 0.8)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Guest banner ────────────────────────────────────────────────────────────
+
+  Widget _guestBanner() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.textSecondary.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              color: AppColors.textSecondary, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'You are browsing as a guest. Sign up for a free account to report hazards and customise alerts.',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textSecondary, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Admin shortcut ──────────────────────────────────────────────────────────
+
+  Widget _adminShortcut(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/admin'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.admin_panel_settings_rounded,
+                  color: AppColors.warning, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Admin Dashboard',
+                      style: TextStyle(
+                          color: AppColors.warning,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                  Text('Manage reports, users & broadcasts',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 11)),
                 ],
               ),
             ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                size: 14, color: AppColors.warning),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHealthChip(String label, bool selected, {bool isAdd = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.danger : AppColors.bgCard,
-        border: Border.all(
-          color: selected ? AppColors.danger : AppColors.border,
-          width: 1,
+  // ── Tier card ───────────────────────────────────────────────────────────────
+
+  Widget _buildTierCard(bool isGuest, bool isRegistered, bool isPremium,
+      Color tierColor, BuildContext context) {
+    if (isPremium) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.info.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.info.withOpacity(0.25)),
         ),
-        borderRadius: BorderRadius.circular(8),
+        child: Row(
+          children: [
+            const Icon(Icons.workspace_premium,
+                color: AppColors.info, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'You have Premium access — all features are unlocked.',
+                style: AppTextStyles.bodySmall
+                    .copyWith(color: AppColors.textSecondary, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isAdd ? Icons.add : Icons.check_circle,
-            size: 14,
-            color: selected ? Colors.white : AppColors.textSecondary,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: selected ? Colors.white : AppColors.textSecondary,
+          const Icon(Icons.workspace_premium,
+              color: AppColors.textDisabled, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isGuest
+                      ? 'Create a free account to unlock basic features'
+                      : 'Upgrade to Premium for health calibration & geo-alerts',
+                  style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4),
+                ),
+                if (isRegistered) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Premium unlocks: health conditions, custom AQI thresholds, geo-alert radius',
+                    style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary, height: 1.4),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (selected)
+          if (isRegistered) ...[
+            const SizedBox(width: 10),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.info.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.info.withOpacity(0.3)),
+              ),
+              child: Text('Upgrade',
+                  style: AppTextStyles.label.copyWith(color: AppColors.info)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Location card ───────────────────────────────────────────────────────────
+
+  Widget _buildLocationCard(BuildContext context) {
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                color: AppColors.bgElevated,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.location_on_rounded,
+                  color: AppColors.textSecondary, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('City Location',
+                      style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w500)),
+                  Consumer<LocationProvider>(
+                    builder: (_, loc, __) => Text(
+                      loc.currentCity.isNotEmpty
+                          ? loc.currentCity
+                          : context.watch<AuthProvider>().currentUser?.city ?? 'Not set',
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final loc = context.read<LocationProvider>();
+                await loc.getCurrentLocation();
+                if (!mounted) return;
+                messenger.showSnackBar(SnackBar(
+                  content: Text('Location updated to ${loc.currentCity}'),
+                  backgroundColor: AppColors.bgElevated,
+                  behavior: SnackBarBehavior.floating,
+                ));
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.bgElevated,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.my_location_rounded,
+                        size: 13, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text('Detect',
+                        style: AppTextStyles.label
+                            .copyWith(color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  // ── Health calibration card (Premium) ──────────────────────────────────────
+
+  Widget _buildHealthCard(AuthProvider auth) {
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select your health conditions',
+                      style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'EcoAlert personalises AQI thresholds and smog warnings based on your conditions.',
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              if (_savingConditions)
+                const SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.primary),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _kAllConditions.map((condition) {
+              final selected = _selectedConditions.contains(condition);
+              return GestureDetector(
+                onTap: () => _toggleCondition(condition, auth),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AppColors.info.withOpacity(0.15)
+                        : AppColors.bgElevated,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: selected
+                          ? AppColors.info.withOpacity(0.5)
+                          : AppColors.borderSubtle,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        selected
+                            ? Icons.check_circle_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 14,
+                        color: selected
+                            ? AppColors.info
+                            : AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        condition,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: selected
+                              ? AppColors.info
+                              : AppColors.textSecondary,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          if (_selectedConditions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(color: AppColors.borderSubtle, height: 1),
+            const SizedBox(height: 10),
             Row(
-              children: const [
-                SizedBox(width: 6),
-                Icon(
-                  Icons.close,
-                  size: 12,
-                  color: Colors.white,
+              children: [
+                const Icon(Icons.tune_rounded,
+                    size: 13, color: AppColors.textDisabled),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _buildPersonalisationNote(_selectedConditions),
+                    style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textDisabled, height: 1.4),
+                  ),
                 ),
               ],
             ),
+          ],
         ],
       ),
+    );
+  }
+
+  String _buildPersonalisationNote(List<String> conditions) {
+    final hasRespiratory =
+        conditions.any((c) => c == 'Asthma' || c == 'COPD');
+    final hasCardiac = conditions.contains('Heart Condition');
+    final notes = <String>[];
+    if (hasRespiratory) notes.add('AQI alerts activated at 50 (Good→Moderate)');
+    if (hasCardiac) notes.add('Heatwave alerts at lower temperature thresholds');
+    if (conditions.contains('Elderly Care') || conditions.contains('Child Care')) {
+      notes.add('Conservative thresholds applied for vulnerable groups');
+    }
+    if (notes.isEmpty) notes.add('Your conditions are saved and will personalise your alerts');
+    return notes.join(' · ');
+  }
+
+  // ── Locked feature card ─────────────────────────────────────────────────────
+
+  Widget _buildLockedCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required String tier,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.bgElevated,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppColors.textDisabled, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(title,
+                        style: AppTextStyles.body.copyWith(
+                            color: AppColors.textDisabled,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.info.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                            color: AppColors.info.withOpacity(0.3)),
+                      ),
+                      child: Text(tier,
+                          style: AppTextStyles.label.copyWith(
+                              color: AppColors.info, fontSize: 9)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(description,
+                    style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textDisabled, height: 1.4)),
+              ],
+            ),
+          ),
+          const Icon(Icons.lock_outline_rounded,
+              size: 16, color: AppColors.textDisabled),
+        ],
+      ),
+    );
+  }
+
+  // ── Sign out ────────────────────────────────────────────────────────────────
+
+  Widget _buildSignOut(AuthProvider auth, BuildContext context) {
+    return GestureDetector(
+      onTap: () => _confirmSignOut(context, auth),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        decoration: BoxDecoration(
+          color: AppColors.danger.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.logout_rounded, color: AppColors.danger, size: 18),
+            const SizedBox(width: 10),
+            Text('Sign Out',
+                style: AppTextStyles.titleMed.copyWith(
+                    color: AppColors.danger, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmSignOut(BuildContext context, AuthProvider auth) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Sign Out',
+            style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text('Are you sure you want to sign out?',
+            style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final nav = Navigator.of(context);
+              Navigator.pop(context);
+              await auth.logout();
+              nav.pushNamedAndRemoveUntil('/login', (_) => false);
+            },
+            child: const Text('Sign Out',
+                style: TextStyle(
+                    color: AppColors.danger, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Contact dialog ──────────────────────────────────────────────────────────
+
+  void _showContact(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Contact Support',
+            style: TextStyle(color: AppColors.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _contactRow(Icons.mail_outline_rounded, 'support@ecoalert.pk'),
+            const SizedBox(height: 8),
+            _contactRow(Icons.phone_outlined, '+92 300 1234567'),
+            const SizedBox(height: 8),
+            _contactRow(Icons.emergency_rounded, '1122 (Emergency Hotline)',
+                color: AppColors.danger),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _contactRow(IconData icon, String text,
+      {Color color = AppColors.textSecondary}) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(text,
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textPrimary)),
+      ],
+    );
+  }
+
+  // ── Shared layout helpers ───────────────────────────────────────────────────
+
+  Widget _sectionLabel(String text) {
+    return Row(
+      children: [
+        Container(
+          width: 3, height: 14,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(text.toUpperCase(),
+            style: AppTextStyles.label.copyWith(
+                color: AppColors.textSecondary, letterSpacing: 1.2)),
+      ],
+    );
+  }
+
+  Widget _buildSection(List<Widget> children) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+// ── Tile components ────────────────────────────────────────────────────────
+
+class _NavTile extends StatelessWidget {
+  const _NavTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+    this.isLast = false,
+  });
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.bgElevated,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: AppColors.textSecondary, size: 18),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: AppTextStyles.body.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w500)),
+                      if (subtitle != null)
+                        Text(subtitle!,
+                            style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.textSecondary)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.textDisabled, size: 18),
+              ],
+            ),
+          ),
+        ),
+        if (!isLast)
+          const Divider(height: 1, indent: 64, color: AppColors.borderSubtle),
+      ],
+    );
+  }
+}
+
+class _ToggleTile extends StatelessWidget {
+  const _ToggleTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.onChanged,
+  });
+  final IconData icon;
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 34, height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.bgElevated,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppColors.textSecondary, size: 18),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(title,
+                style: AppTextStyles.body.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w500)),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.textPrimary,
+            activeTrackColor: AppColors.primary.withOpacity(0.4),
+            inactiveThumbColor: AppColors.textSecondary,
+            inactiveTrackColor: AppColors.bgElevated,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  const _InfoTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.bgElevated,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: AppColors.textSecondary, size: 18),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(title,
+                    style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w500)),
+              ),
+              Text(value,
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+        const Divider(height: 1, indent: 64, color: AppColors.borderSubtle),
+      ],
     );
   }
 }

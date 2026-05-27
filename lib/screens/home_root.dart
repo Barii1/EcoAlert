@@ -260,13 +260,21 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(width: 8),
 
-          // Model status shortcut
-          IconButton(
-            icon: const Icon(Icons.monitor_heart_rounded,
-                color: AppColors.info, size: 20),
-            tooltip: 'Model Status',
-            onPressed: () => Navigator.pushNamed(context, '/model-status'),
-          ),
+          // Admin-only shortcuts
+          if (authProvider.isAdmin) ...[
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings_rounded,
+                  color: AppColors.warning, size: 20),
+              tooltip: 'Admin Dashboard',
+              onPressed: () => Navigator.pushNamed(context, '/admin'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.monitor_heart_rounded,
+                  color: AppColors.info, size: 20),
+              tooltip: 'Model Status',
+              onPressed: () => Navigator.pushNamed(context, '/model-status'),
+            ),
+          ],
           // Notifications bell
           IconButton(
             icon: const Icon(Icons.notifications_outlined,

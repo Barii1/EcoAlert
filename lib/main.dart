@@ -33,6 +33,7 @@ import 'screens/community_screen.dart';
 import 'screens/report_hazard_screen.dart';
 import 'screens/report_confirmation_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/aqi_detail_screen.dart';
 import 'screens/flood_detail_screen.dart';
 import 'screens/model_status_screen.dart';
@@ -205,6 +206,7 @@ class EcoAlertApp extends StatelessWidget {
                 '/aqi-scan': (_) => const AqiScanScreen(),
                 '/alerts': (_) => const AlertsScreen(),
                 '/profile': (_) => const ProfileScreen(),
+                '/settings': (_) => const SettingsScreen(),
               };
 
               final pageBuilder = routes[settings.name];
@@ -299,10 +301,13 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   AqiProvider? _aqiProvider;
+  LocationProvider? _locationProvider;
+  String _lastKnownCity = AppConfig.defaultCity;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
     final nextAqiProvider = context.read<AqiProvider>();
     if (!identical(_aqiProvider, nextAqiProvider)) {
       _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
@@ -313,17 +318,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _syncDangerThemeFromAqi();
       });
     }
+
+    final nextLocation = context.read<LocationProvider>();
+    if (!identical(_locationProvider, nextLocation)) {
+      _locationProvider?.removeListener(_onLocationChanged);
+      _locationProvider = nextLocation;
+      _locationProvider!.addListener(_onLocationChanged);
+      // Sync immediately in case location was fetched before this screen loaded.
+      _syncLocationToProviders();
+    }
   }
 
   @override
   void dispose() {
     _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
+    _locationProvider?.removeListener(_onLocationChanged);
     super.dispose();
   }
 
   void _syncDangerThemeFromAqi() {
     final aqi = _aqiProvider?.current;
     context.read<DangerThemeProvider>().updateFromAqi(aqi);
+  }
+
+  void _onLocationChanged() => _syncLocationToProviders();
+
+  void _syncLocationToProviders() {
+    final city = _locationProvider?.currentCity ?? AppConfig.defaultCity;
+    if (city == _lastKnownCity) return;
+    _lastKnownCity = city;
+    if (!mounted) return;
+    context.read<AqiProvider>().loadForCity(city);
+    context.read<FloodProvider>().loadForCity(city);
+    context.read<WeatherProvider>().loadForCity(city);
   }
 
   @override

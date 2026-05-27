@@ -42,6 +42,7 @@ class UserModel {
   final String city;
   final DateTime createdAt;
   final UserRole role;
+  final List<String> healthConditions;
 
   UserModel({
     required this.id,
@@ -53,6 +54,7 @@ class UserModel {
     required this.city,
     required this.createdAt,
     this.role = UserRole.registered,
+    this.healthConditions = const [],
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -77,6 +79,10 @@ class UserModel {
           ) ??
           DateTime.now(),
       role: _userRoleFromString(json['role'] as String?),
+      healthConditions: (json['health_conditions'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
     );
   }
 
@@ -91,6 +97,7 @@ class UserModel {
       'city': city,
       'createdAt': createdAt.toIso8601String(),
       'role': _userRoleToString(role),
+      'health_conditions': healthConditions,
     };
   }
 
@@ -104,6 +111,7 @@ class UserModel {
     String? city,
     DateTime? createdAt,
     UserRole? role,
+    List<String>? healthConditions,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -115,6 +123,7 @@ class UserModel {
       city: city ?? this.city,
       createdAt: createdAt ?? this.createdAt,
       role: role ?? this.role,
+      healthConditions: healthConditions ?? this.healthConditions,
     );
   }
 }
