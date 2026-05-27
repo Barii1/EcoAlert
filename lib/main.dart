@@ -37,6 +37,7 @@ import 'screens/settings_screen.dart';
 import 'screens/aqi_detail_screen.dart';
 import 'screens/flood_detail_screen.dart';
 import 'screens/model_status_screen.dart';
+import 'screens/aqi_image_classify_screen.dart';
 
 import 'providers/alert_provider.dart';
 import 'providers/aqi_provider.dart';
@@ -204,6 +205,7 @@ class EcoAlertApp extends StatelessWidget {
                 '/flood-detail': (_) => const FloodDetailScreen(),
                 '/model-status': (_) => const ModelStatusScreen(),
                 '/aqi-scan': (_) => const AqiScanScreen(),
+                '/aqi-image-classify': (_) => const AqiImageClassifyScreen(),
                 '/alerts': (_) => const AlertsScreen(),
                 '/profile': (_) => const ProfileScreen(),
                 '/settings': (_) => const SettingsScreen(),
@@ -213,7 +215,7 @@ class EcoAlertApp extends StatelessWidget {
               if (pageBuilder == null) return null;
               final page = pageBuilder(settings);
 
-              const slideUpRoutes = {'/alert-detail', '/aqi-detail', '/flood-detail', '/report-hazard', '/aqi-scan'};
+              const slideUpRoutes = {'/alert-detail', '/aqi-detail', '/flood-detail', '/report-hazard', '/aqi-scan', '/aqi-image-classify'};
               if (slideUpRoutes.contains(settings.name)) {
                 return SlideUpPageRoute(page: page);
               }

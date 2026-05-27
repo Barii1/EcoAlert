@@ -589,11 +589,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ─────────────────── QUICK ACTIONS ───────────────────
   Widget _buildQuickActions(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.p16),
       child: Row(
         children: [
-          Expanded(
+          SizedBox(
+            width: 170,
             child: _QuickActionCard(
               icon: Icons.camera_alt_rounded,
               label: 'Scan & Report',
@@ -603,12 +605,25 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Expanded(
+          SizedBox(
+            width: 170,
+            child: _QuickActionCard(
+              icon: Icons.image_search_rounded,
+              label: 'AQI Image Scan',
+              sublabel: 'ML air quality scan',
+              color: AppColors.info,
+              onTap: () =>
+                  Navigator.pushNamed(context, '/aqi-image-classify'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 170,
             child: _QuickActionCard(
               icon: Icons.map_rounded,
               label: 'Hazard Map',
               sublabel: 'View live map',
-              color: AppColors.info,
+              color: AppColors.success,
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const MapScreen()),
