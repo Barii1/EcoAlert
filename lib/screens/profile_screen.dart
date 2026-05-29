@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../config/app_colors.dart';
+import '../config/app_config.dart';
 import '../config/app_text_styles.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
@@ -39,12 +41,16 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late List<String> _selectedConditions;
   bool _savingConditions = false;
+  String _appVersion = '—';
 
   @override
   void initState() {
     super.initState();
     final user = context.read<AuthProvider>().currentUser;
     _selectedConditions = List<String>.from(user?.healthConditions ?? []);
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _appVersion = '${info.version}+${info.buildNumber}');
+    });
   }
 
   Future<void> _toggleCondition(String condition, AuthProvider auth) async {
@@ -177,12 +183,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _InfoTile(
                         icon: Icons.info_outline_rounded,
                         title: 'App Version',
-                        value: '1.0.0',
+                        value: _appVersion,
                       ),
                       _NavTile(
                         icon: Icons.mail_outline_rounded,
                         title: 'Contact Support',
-                        subtitle: 'support@ecoalert.pk',
+                        subtitle: AppConfig.supportEmail,
                         onTap: () => _showContact(context),
                         isLast: true,
                       ),
@@ -808,9 +814,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _contactRow(Icons.mail_outline_rounded, 'support@ecoalert.pk'),
+            _contactRow(Icons.mail_outline_rounded, AppConfig.supportEmail),
             const SizedBox(height: 8),
-            _contactRow(Icons.phone_outlined, '+92 300 1234567'),
+            _contactRow(Icons.phone_outlined, AppConfig.supportPhone),
             const SizedBox(height: 8),
             _contactRow(Icons.emergency_rounded, '1122 (Emergency Hotline)',
                 color: AppColors.danger),

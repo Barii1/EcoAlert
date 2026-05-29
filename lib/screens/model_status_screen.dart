@@ -87,6 +87,7 @@ class _ModelStatusScreenState extends State<ModelStatusScreen>
     });
 
     final coords = _cities[_selectedCity] ?? (31.5497, 74.3436);
+    final existingRainfall = context.read<FloodProvider>().risk?.rainfall;
 
     try {
       final uri = Uri.parse(
@@ -108,7 +109,7 @@ class _ModelStatusScreenState extends State<ModelStatusScreen>
 
       final raw = jsonDecode(response.body) as Map<String, dynamic>;
 
-      final dummyRainfall = RainfallData(
+      final rainfallData = existingRainfall ?? RainfallData(
         mm24h: 0, mm48h: 0, mmPerHour: 0,
         temperature: (raw['features_used']?['temperature'] as num?)?.toDouble() ?? 0,
         humidity: (raw['features_used']?['humidity'] as num?)?.toDouble() ?? 0,
@@ -118,7 +119,7 @@ class _ModelStatusScreenState extends State<ModelStatusScreen>
         latitude: coords.$1,
         longitude: coords.$2,
         city: _selectedCity,
-        rainfall: dummyRainfall,
+        rainfall: rainfallData,
       );
 
       setState(() {

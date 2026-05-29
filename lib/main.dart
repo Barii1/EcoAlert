@@ -221,7 +221,72 @@ class EcoAlertApp extends StatelessWidget {
               }
               return FadeThroughPageRoute(page: page);
             },
+            // Light theme
             theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.light(
+                primary: const Color(0xFF2C2C2E),
+                secondary: const Color(0xFF555558),
+                surface: const Color(0xFFF2F2F7),
+                onSurface: const Color(0xFF111111),
+                error: const Color(0xFFE03535),
+              ),
+              scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+              cardColor: Colors.white,
+              textTheme: ThemeData.light().textTheme.apply(
+                bodyColor: const Color(0xFF111111),
+                displayColor: const Color(0xFF111111),
+              ),
+              appBarTheme: const AppBarTheme(
+                centerTitle: false,
+                elevation: 0,
+                foregroundColor: Color(0xFF111111),
+                backgroundColor: Color(0xFFF2F2F7),
+              ),
+              cardTheme: CardThemeData(
+                color: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              inputDecorationTheme: InputDecorationTheme(
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+              ),
+              elevatedButtonTheme: ElevatedButtonThemeData(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2C2C2E),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              switchTheme: SwitchThemeData(
+                thumbColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.selected)
+                        ? Colors.white
+                        : const Color(0xFF888888)),
+                trackColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.selected)
+                        ? const Color(0xFF2C2C2E)
+                        : const Color(0xFFCCCCCC)),
+              ),
+            ),
+            // Dark theme
+            darkTheme: ThemeData(
               useMaterial3: true,
               colorScheme: ColorScheme.dark(
                 primary: AppColors.primary,

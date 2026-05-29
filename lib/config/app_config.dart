@@ -36,4 +36,7 @@ class AppConfig {
   static const int refreshIntervalMinutes = 15;
   static const String premiumPriceLabel = 'PKR 499 / month';
   static const int alertMaxAgeDays = 14;
+
+  static const String supportEmail = 'support@ecoalert.pk';
+  static const String supportPhone = '+92 300 1234567';
 }
