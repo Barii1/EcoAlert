@@ -30,13 +30,34 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
   bool _obscurePassword = true;
-  bool _remember = true;
+  AuthProvider? _authProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    _authProvider = context.read<AuthProvider>();
+    _authProvider!.addListener(_onAuthStateChanged);
+  }
 
   @override
   void dispose() {
+    _authProvider?.removeListener(_onAuthStateChanged);
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onAuthStateChanged() {
+    if (!mounted) return;
+    final auth = _authProvider;
+    if (auth == null || !auth.isAuthenticated) return;
+    if (auth.isAdmin) {
+      Navigator.pushReplacementNamed(context, '/admin');
+    } else if (widget.onSuccess != null) {
+      widget.onSuccess!.call();
+    } else {
+      Navigator.pushReplacementNamed(context, '/navigation');
+    }
   }
 
   Future<void> _handleForgotPassword() async {
@@ -75,64 +96,41 @@ class _LoginScreenState extends State<LoginScreen> {
     if (form != null && !form.validate()) return;
 
     try {
-      final authProvider = context.read<AuthProvider>();
-      await authProvider.login(
+      await context.read<AuthProvider>().login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
-
-      if (!mounted) return;
-      if (authProvider.isAdmin) {
-        Navigator.pushReplacementNamed(context, '/admin');
-      } else if (widget.onSuccess != null) {
-        widget.onSuccess!.call();
-      } else {
-        Navigator.pushReplacementNamed(context, '/navigation');
-      }
+      // Navigation is handled by _onAuthStateChanged listener.
     } on AuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login failed: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Login failed: $e'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
   Future<void> _handleGoogleLogin() async {
     final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.signInWithGoogle();
-    if (!mounted) return;
-
-    if (success) {
-      if (authProvider.isAdmin) {
-        Navigator.pushReplacementNamed(context, '/admin');
-      } else if (widget.onSuccess != null) {
-        widget.onSuccess!.call();
-      } else {
-        Navigator.pushReplacementNamed(context, '/navigation');
-      }
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(authProvider.errorMessage ?? 'Google sign-in failed'),
+    final proceeded = await authProvider.signInWithGoogle();
+    if (!mounted || proceeded) return;
+    // proceeded == false: either cancelled (no errorMessage) or a real error.
+    final error = authProvider.errorMessage;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
-      ),
-    );
+      ));
+    }
   }
 
   @override
@@ -224,53 +222,27 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _SquareToggle(
-                                  value: _remember,
-                                  accent: Colors.grey,
-                                  onChanged: (value) {
-                                    setState(() => _remember = value);
-                                  },
-                                ),
-                                const SizedBox(width: 10),
-                                GestureDetector(
-                                  onTap: () => setState(() => _remember = !_remember),
-                                  child: const Text(
-                                    'Stay signed in',
-                                    style: TextStyle(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w300,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: authProvider.isLoading
+                                ? null
+                                : _handleForgotPassword,
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.textSecondary,
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            TextButton(
-                              onPressed: authProvider.isLoading
-                                  ? null
-                                  : _handleForgotPassword,
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.textSecondary,
-                                padding: EdgeInsets.zero,
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: const Text(
-                                'Forgot password?',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w300,
-                                ),
+                            child: const Text(
+                              'Forgot password?',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w300,
                               ),
                             ),
-                          ],
+                          ),
                         ),
                         const SizedBox(height: 22),
                         SizedBox(
@@ -481,39 +453,6 @@ class _DividerLabel extends StatelessWidget {
   }
 }
 
-class _SquareToggle extends StatelessWidget {
-  final bool value;
-  final Color accent;
-  final ValueChanged<bool> onChanged;
-
-  const _SquareToggle({
-    required this.value,
-    required this.accent,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 20,
-        height: 20,
-        decoration: BoxDecoration(
-          color: value ? accent : Colors.transparent,
-          border: Border.all(
-            color: value ? accent : AppColors.borderSubtle,
-          ),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: value
-            ? const Icon(Icons.check, size: 14, color: Colors.white)
-            : const SizedBox.shrink(),
-      ),
-    );
-  }
-}
 
 // ignore: unused_element
 class _TinyDot extends StatelessWidget {

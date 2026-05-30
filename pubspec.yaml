@@ -33,6 +33,9 @@ dependencies:
   cupertino_icons: ^1.0.6
   flutter_svg: ^2.0.9
   
+  # Google Sign-In (native popup — token passed to Supabase signInWithIdToken)
+  google_sign_in: ^6.2.1
+
   # HTTP & API
   http: ^1.1.2
   dio: ^5.4.0

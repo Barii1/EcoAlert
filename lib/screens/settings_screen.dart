@@ -6,7 +6,6 @@ import '../config/eco_colors.dart';
 import '../config/app_text_styles.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/theme_provider.dart';
 import '../widgets/app_background.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -15,7 +14,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final theme = context.watch<ThemeProvider>();
     final colors = EcoColors.of(context);
     final user = auth.currentUser;
 
@@ -34,24 +32,6 @@ class SettingsScreen extends StatelessWidget {
                       _UserCard(user: user, colors: colors),
                       const SizedBox(height: 28),
                     ],
-
-                    _sectionLabel('Appearance', colors),
-                    const SizedBox(height: 10),
-                    _buildSection(colors, [
-                      _ToggleTile(
-                        icon: theme.isDarkMode
-                            ? Icons.dark_mode_outlined
-                            : Icons.light_mode_outlined,
-                        title: 'Dark Mode',
-                        subtitle: theme.isDarkMode
-                            ? 'Using dark theme'
-                            : 'Using light theme',
-                        value: theme.isDarkMode,
-                        onChanged: (_) => theme.toggleTheme(),
-                        colors: colors,
-                      ),
-                    ]),
-                    const SizedBox(height: 24),
 
                     _sectionLabel('Account', colors),
                     const SizedBox(height: 10),
@@ -389,72 +369,6 @@ class _NavTile extends StatelessWidget {
         if (!isLast)
           Divider(height: 1, indent: 64, color: colors.borderSubtle),
       ],
-    );
-  }
-}
-
-class _ToggleTile extends StatelessWidget {
-  const _ToggleTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.onChanged,
-    required this.colors,
-    this.subtitle,
-  });
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final EcoColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: colors.bgElevated,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: colors.textSecondary, size: 18),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.body.copyWith(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: colors.textSecondary),
-                  ),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: colors.textInverse,
-            activeTrackColor: colors.primary,
-            inactiveThumbColor: colors.textSecondary,
-            inactiveTrackColor: colors.bgElevated,
-          ),
-        ],
-      ),
     );
   }
 }

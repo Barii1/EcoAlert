@@ -39,7 +39,7 @@ class UploadService {
     required List<File> images,
   }) async {
     if (images.isEmpty) return [];
-    final bucket = AppConfig.supabaseReportBucket;
+    const bucket = AppConfig.supabaseReportBucket;
     final now = DateTime.now().millisecondsSinceEpoch;
     final urls = <String>[];
     for (var i = 0; i < images.length; i++) {
@@ -60,7 +60,7 @@ class UploadService {
     required String uid,
     required File image,
   }) async {
-    final bucket = AppConfig.supabaseProfileBucket;
+    const bucket = AppConfig.supabaseProfileBucket;
     final extension = image.path.split('.').last;
     final path = 'profiles/$uid.$extension';
     return _uploadFile(

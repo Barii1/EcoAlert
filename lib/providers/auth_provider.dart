@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -31,6 +33,7 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   bool _hasShownUpgradePrompt = false;
+  StreamSubscription<AuthState>? _authStateSubscription;
 
   AuthProvider({
     SupabaseAuthService? supabaseAuthService,
@@ -38,7 +41,48 @@ class AuthProvider extends ChangeNotifier {
     bool useSupabase = false,
   })  : _supabaseAuthService = supabaseAuthService,
         _supabaseService = supabaseService,
-        _useSupabase = useSupabase;
+        _useSupabase = useSupabase {
+    if (supabaseAuthService != null) {
+      _authStateSubscription =
+          supabaseAuthService.authStateChanges.listen(_onAuthStateChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _onAuthStateChange(AuthState state) async {
+    if (state.event == AuthChangeEvent.signedIn &&
+        !_isAuthenticated &&
+        state.session?.user != null) {
+      // Handles OAuth callbacks (e.g. Google). Email/password login sets
+      // _isAuthenticated = true synchronously before this fires, so the
+      // !_isAuthenticated guard prevents double-processing.
+      final user = state.session!.user;
+      _isSupabaseUser = true;
+      _isEmailVerified = user.emailConfirmedAt != null;
+      _isAuthenticated = true;
+      try {
+        _profile = await _supabaseService?.getById(SupabaseTables.profiles, user.id);
+      } catch (_) {
+        _profile = null;
+      }
+      _currentUser = _profileToUserModel(user.id, _profile);
+      _hasShownUpgradePrompt =
+          _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
+      _hasShownVerifyWarning = false;
+      _isLoading = false;
+      _errorMessage = null;
+      notifyListeners();
+      onAuthLoginSuccess?.call();
+    } else if (state.event == AuthChangeEvent.signedOut && _isAuthenticated) {
+      _clearLocalAuthState();
+      notifyListeners();
+    }
+  }
 
   UserModel? get currentUser => _currentUser;
   bool get isAuthenticated => _isAuthenticated;
@@ -173,9 +217,13 @@ class AuthProvider extends ChangeNotifier {
     }
     _isSupabaseUser = true;
     _isEmailVerified = user.emailConfirmedAt != null;
-    _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
-    _currentUser = _profileToUserModel(user.id, _profile);
     _isAuthenticated = true;
+    try {
+      _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+    } catch (_) {
+      _profile = null;
+    }
+    _currentUser = _profileToUserModel(user.id, _profile);
     notifyListeners();
   }
 
@@ -204,9 +252,14 @@ class AuthProvider extends ChangeNotifier {
 
       _isSupabaseUser = true;
       _isEmailVerified = user.emailConfirmedAt != null;
-      _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
-      _currentUser = _profileToUserModel(user.id, _profile);
       _isAuthenticated = true;
+
+      try {
+        _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+      } catch (_) {
+        _profile = null;
+      }
+      _currentUser = _profileToUserModel(user.id, _profile);
       _hasShownUpgradePrompt =
           _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
       _hasShownVerifyWarning = false;
@@ -250,25 +303,34 @@ class AuthProvider extends ChangeNotifier {
     );
     final user = response.user;
     if (user != null) {
-      await _supabaseService!.client.from(SupabaseTables.profiles).upsert({
-        'id': user.id,
-        'username': username,
-        'email': email,
-        'phone_number': phoneNumber,
-        'cnic_hash': HashUtils.hashCnic(cnicNumber),
-        'province': province,
-        'city': city,
-        'role': 'registered',
-        'has_seen_plan_prompt': false,
-      });
+      try {
+        await _supabaseService!.client.from(SupabaseTables.profiles).upsert({
+          'id': user.id,
+          'username': username,
+          'email': email,
+          'phone_number': phoneNumber,
+          'cnic_hash': HashUtils.hashCnic(cnicNumber),
+          'province': province,
+          'city': city,
+          'role': 'registered',
+          'has_seen_plan_prompt': false,
+        });
+        _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+      } catch (_) {
+        _profile = null;
+      }
       _isSupabaseUser = true;
       _isEmailVerified = user.emailConfirmedAt != null;
-      _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
       _currentUser = _profileToUserModel(user.id, _profile);
       _isAuthenticated = response.session != null;
       _hasShownVerifyWarning = false;
       notifyListeners();
-      onAuthLoginSuccess?.call();
+      // Only fire login success when there is a real session (email confirmation
+      // disabled). When confirmation is required, session is null here and the
+      // auth state listener handles completion after the user verifies.
+      if (response.session != null) {
+        onAuthLoginSuccess?.call();
+      }
     }
   }
 
@@ -358,6 +420,10 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Shows the native Google account picker and signs in via Supabase
+  /// signInWithIdToken. Returns true if sign-in is in progress (popup accepted),
+  /// false if the user cancelled (no error) or an error occurred (errorMessage set).
+  /// Completion is handled by [_onAuthStateChange].
   Future<bool> signInWithGoogle() async {
     _isLoading = true;
     _errorMessage = null;
@@ -365,22 +431,27 @@ class AuthProvider extends ChangeNotifier {
 
     if (_supabaseAuthService == null) {
       _isLoading = false;
-      _errorMessage = 'Supabase auth is not initialized.';
+      _errorMessage = 'Auth service not available.';
       notifyListeners();
       return false;
     }
 
     try {
-      await _supabaseAuthService!.signInWithGoogle();
-      _isLoading = false;
+      final proceeded = await _supabaseAuthService!.signInWithGoogle();
+      if (!proceeded) {
+        // User dismissed the popup — not an error, just stop loading.
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+      // Sign-in submitted. Keep _isLoading = true — _onAuthStateChange clears it.
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Google sign-in failed: $e';
-      return false;
-    } finally {
       _isLoading = false;
+      _errorMessage = 'Google sign-in failed: $e';
       notifyListeners();
+      return false;
     }
   }
 

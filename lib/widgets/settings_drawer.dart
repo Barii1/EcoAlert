@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
 import '../providers/auth_provider.dart';
-import '../providers/theme_provider.dart';
 
 class SettingsDrawer extends StatelessWidget {
   const SettingsDrawer({super.key});
@@ -72,37 +71,6 @@ class SettingsDrawer extends StatelessWidget {
             const SizedBox(height: 8),
 
             _SectionTitle(title: 'Quick actions'),
-
-            // Dark Mode toggle
-            Consumer<ThemeProvider>(
-              builder: (context, theme, _) => SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: cardColor,
-                  child: Icon(
-                    theme.isDarkMode
-                        ? Icons.dark_mode_outlined
-                        : Icons.light_mode_outlined,
-                    color: AppColors.textSecondary,
-                    size: 18,
-                  ),
-                ),
-                title: Text(
-                  'Dark Mode',
-                  style: AppTextStyles.bodyPrimary.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
-                  ),
-                ),
-                value: theme.isDarkMode,
-                onChanged: (_) => theme.toggleTheme(),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-            Divider(color: cs.onSurface.withOpacity(0.1)),
-            const SizedBox(height: 8),
 
             _SectionTitle(title: 'Account'),
 

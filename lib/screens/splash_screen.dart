@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-
-import '../providers/auth_provider.dart';
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
 
@@ -53,15 +50,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 3500), () {
       if (!mounted) return;
-      final auth = context.read<AuthProvider>();
-      if (auth.isAuthenticated) {
-        Navigator.pushReplacementNamed(
-          context,
-          auth.isAdmin ? '/admin' : '/navigation',
-        );
-      } else {
-        Navigator.pushReplacementNamed(context, '/login');
-      }
+      Navigator.pushReplacementNamed(context, '/login');
     });
   }
 

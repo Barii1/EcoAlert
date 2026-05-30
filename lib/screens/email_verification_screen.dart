@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_text_styles.dart';
+import '../providers/auth_provider.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   final String email;
@@ -14,102 +16,62 @@ class EmailVerificationScreen extends StatefulWidget {
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
-  Timer? _verificationCheckTimer;
   Timer? _resendCooldownTimer;
   int _resendCooldown = 0;
-  bool _isChecking = false;
+  AuthProvider? _authProvider;
 
   @override
   void initState() {
     super.initState();
-    _startVerificationCheck();
+    // Listen for deep-link-based verification: when the user taps the link on
+    // their phone, supabase_flutter processes it, fires signedIn on the auth
+    // stream, and AuthProvider sets isAuthenticated = true + notifies.
+    _authProvider = context.read<AuthProvider>();
+    _authProvider!.addListener(_onAuthStateChanged);
   }
 
   @override
   void dispose() {
-    _verificationCheckTimer?.cancel();
+    _authProvider?.removeListener(_onAuthStateChanged);
     _resendCooldownTimer?.cancel();
     super.dispose();
   }
 
-  void _startVerificationCheck() {
-    _verificationCheckTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      final client = Supabase.instance.client;
-      await client.auth.refreshSession();
-      final user = client.auth.currentUser;
-      final isVerified = user?.emailConfirmedAt != null;
-      if (isVerified && mounted) {
-        Navigator.pushReplacementNamed(context, '/navigation');
-      }
-    });
+  void _onAuthStateChanged() {
+    if (!mounted) return;
+    if (_authProvider?.isAuthenticated == true) {
+      Navigator.pushReplacementNamed(context, '/navigation');
+    }
   }
 
   Future<void> _handleResendEmail() async {
     if (_resendCooldown > 0) return;
-
     try {
       await Supabase.instance.client.auth.resend(
         type: OtpType.signup,
         email: widget.email,
       );
       setState(() => _resendCooldown = 60);
-      _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
         if (_resendCooldown > 0) {
           setState(() => _resendCooldown--);
         } else {
-          timer.cancel();
+          t.cancel();
         }
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Verification email sent'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Verification email sent'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not resend email: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  Future<void> _handleContinue() async {
-    setState(() => _isChecking = true);
-    try {
-      final client = Supabase.instance.client;
-      await client.auth.refreshSession();
-      final user = client.auth.currentUser;
-      final isVerified = user?.emailConfirmedAt != null;
-      if (!mounted) return;
-      if (isVerified) {
-        Navigator.pushReplacementNamed(context, '/navigation');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Email not verified yet. Check your inbox and spam folder.'),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isChecking = false);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isChecking = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Could not resend: $e'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
@@ -129,7 +91,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
         ),
       ),
       body: SafeArea(
@@ -169,12 +131,24 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       height: 1.5,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tap the link in the email to verify.\nIf you verified on this device, the app will continue automatically.',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: onSurfaceVariant.withOpacity(0.7),
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
                   const SizedBox(height: 40),
+                  // Primary action: go to login and sign in with verified account
                   SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _isChecking ? null : _handleContinue,
+                      onPressed: () =>
+                          Navigator.pushReplacementNamed(context, '/login'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primary,
                         foregroundColor: Colors.white,
@@ -182,23 +156,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                         elevation: 8,
                         shadowColor: primary.withOpacity(0.2),
                       ),
-                      child: _isChecking
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              "I've Verified, Continue",
-                              style: AppTextStyles.headline.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
-                              ),
-                            ),
+                      child: Text(
+                        "I've Verified — Sign In",
+                        style: AppTextStyles.headline.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -209,7 +174,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       onPressed: _resendCooldown > 0 ? null : _handleResendEmail,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: primary,
-                        side: BorderSide(color: primary.withOpacity(0.3), width: 1.5),
+                        side: BorderSide(
+                            color: primary.withOpacity(0.3), width: 1.5),
                         shape: const StadiumBorder(),
                       ),
                       child: Text(
@@ -226,7 +192,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                   ),
                   const SizedBox(height: 32),
                   Text(
-                    'Check your email and spam folder',
+                    'Check your spam folder if you don\'t see it',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.body.copyWith(
                       color: onSurfaceVariant.withOpacity(0.6),

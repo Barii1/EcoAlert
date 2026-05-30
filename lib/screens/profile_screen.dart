@@ -8,7 +8,6 @@ import '../config/app_text_styles.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/location_provider.dart';
-import '../providers/theme_provider.dart';
 import '../widgets/app_background.dart';
 import '../widgets/surface_card.dart';
 
@@ -71,7 +70,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final theme = context.watch<ThemeProvider>();
     final user = auth.currentUser;
 
     final isAdmin = auth.isAdmin;
@@ -149,21 +147,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 'personalised AQI warnings and smog alerts.',
                             tier: 'Premium',
                           ),
-                    const SizedBox(height: 24),
-
-                    // ── Appearance ───────────────────────────────────────────
-                    _sectionLabel('Appearance'),
-                    const SizedBox(height: 10),
-                    _buildSection([
-                      _ToggleTile(
-                        icon: theme.isDarkMode
-                            ? Icons.dark_mode_outlined
-                            : Icons.light_mode_outlined,
-                        title: 'Dark Mode',
-                        value: theme.isDarkMode,
-                        onChanged: (_) => theme.toggleTheme(),
-                      ),
-                    ]),
                     const SizedBox(height: 24),
 
                     // ── About & Support ──────────────────────────────────────
@@ -936,53 +919,6 @@ class _NavTile extends StatelessWidget {
         if (!isLast)
           const Divider(height: 1, indent: 64, color: AppColors.borderSubtle),
       ],
-    );
-  }
-}
-
-class _ToggleTile extends StatelessWidget {
-  const _ToggleTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.onChanged,
-  });
-  final IconData icon;
-  final String title;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 34, height: 34,
-            decoration: BoxDecoration(
-              color: AppColors.bgElevated,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: AppColors.textSecondary, size: 18),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(title,
-                style: AppTextStyles.body.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w500)),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: AppColors.textPrimary,
-            activeTrackColor: AppColors.primary.withOpacity(0.4),
-            inactiveThumbColor: AppColors.textSecondary,
-            inactiveTrackColor: AppColors.bgElevated,
-          ),
-        ],
-      ),
     );
   }
 }
