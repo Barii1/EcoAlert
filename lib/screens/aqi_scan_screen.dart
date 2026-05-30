@@ -2,11 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
 import '../providers/aqi_provider.dart';
 import '../providers/location_provider.dart';
+import '../services/aqi_image_service.dart';
 
 class AqiScanScreen extends StatefulWidget {
   const AqiScanScreen({super.key});
@@ -21,6 +23,8 @@ class _AqiScanScreenState extends State<AqiScanScreen>
   bool _cameraInitialized = false;
   bool _cameraError = false;
   bool _capturing = false;
+  AqiImagePrediction? _imagePrediction;
+  String? _imagePredictionError;
   late final AnimationController _pulseCtrl;
 
   @override
@@ -33,9 +37,19 @@ class _AqiScanScreenState extends State<AqiScanScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initCamera();
-      context.read<AqiProvider>().loadForCity(
-            context.read<LocationProvider>().currentCity,
-          );
+      final location = context.read<LocationProvider>();
+      location.getCurrentLocation().then((_) {
+        if (!mounted) return;
+        final pos = location.currentPosition;
+        if (pos != null) {
+          context.read<AqiProvider>().loadForLocation(
+                pos,
+                cityLabel: location.currentCity,
+              );
+        } else {
+          context.read<AqiProvider>().loadForCity(location.currentCity);
+        }
+      });
     });
   }
 
@@ -74,38 +88,32 @@ class _AqiScanScreenState extends State<AqiScanScreen>
 
   Future<void> _captureAndReport(BuildContext context, dynamic reading) async {
     if (_controller == null || !_cameraInitialized) {
-      Navigator.pushNamed(context, '/report-hazard', arguments: {
-        'type': 'air_quality',
-        'description': reading != null
-            ? 'AQI reading: ${reading.aqi} (${reading.categoryLabel})'
-            : 'Community AQI report',
-      });
+      setState(() => _imagePredictionError = 'Camera unavailable.');
       return;
     }
     if (_capturing) return;
-    setState(() => _capturing = true);
+    setState(() {
+      _capturing = true;
+      _imagePrediction = null;
+      _imagePredictionError = null;
+    });
     try {
       final file = await _controller!.takePicture();
+      final prediction = await AqiImageService.predictImage(
+        File(file.path),
+        currentReading: reading,
+      );
       if (!mounted) return;
-      // ignore: use_build_context_synchronously
-      Navigator.pushNamed(context, '/report-hazard', arguments: {
-        'type': 'air_quality',
-        'imagePath': file.path,
-        'description': reading != null
-            ? 'AQI reading: ${reading.aqi} (${reading.categoryLabel})'
-            : 'Community AQI report',
+      setState(() {
+        _imagePrediction = prediction;
+        _imagePredictionError = null;
       });
     } catch (e) {
-      debugPrint('[AqiScan] Capture error: $e');
+      debugPrint('[AqiScan] Image classification error: $e');
       if (mounted) {
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Could not capture photo. Try again.'),
-            backgroundColor: AppColors.bgElevated,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        setState(() {
+          _imagePredictionError = e.toString().replaceFirst('Exception: ', '');
+        });
       }
     } finally {
       if (mounted) setState(() => _capturing = false);
@@ -142,8 +150,8 @@ class _AqiScanScreenState extends State<AqiScanScreen>
                 AnimatedBuilder(
                   animation: _pulseCtrl,
                   builder: (_, __) => _ScanFrame(
-                    color: accentColor
-                        .withOpacity(0.6 + 0.4 * _pulseCtrl.value),
+                    color:
+                        accentColor.withOpacity(0.6 + 0.4 * _pulseCtrl.value),
                   ),
                 ),
 
@@ -154,8 +162,8 @@ class _AqiScanScreenState extends State<AqiScanScreen>
                 right: 0,
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
                       children: [
                         _GlassBtn(
@@ -215,6 +223,8 @@ class _AqiScanScreenState extends State<AqiScanScreen>
                 child: _BottomPanel(
                   reading: reading,
                   capturing: _capturing,
+                  imagePrediction: _imagePrediction,
+                  imagePredictionError: _imagePredictionError,
                   accentColor: accentColor,
                   onCapture: () => _captureAndReport(context, reading),
                   onViewAqi: () {
@@ -261,14 +271,13 @@ class _AqiScanScreenState extends State<AqiScanScreen>
           const SizedBox(height: 16),
           Text(
             kIsWeb ? 'Camera not supported on web' : 'Camera unavailable',
-            style: AppTextStyles.body
-                .copyWith(color: AppColors.textSecondary),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 6),
           Text(
             'You can still submit a report manually.',
-            style: AppTextStyles.bodySmall
-                .copyWith(color: AppColors.textDisabled),
+            style:
+                AppTextStyles.bodySmall.copyWith(color: AppColors.textDisabled),
           ),
         ],
       ),
@@ -382,6 +391,8 @@ class _BottomPanel extends StatelessWidget {
   const _BottomPanel({
     required this.reading,
     required this.capturing,
+    required this.imagePrediction,
+    required this.imagePredictionError,
     required this.accentColor,
     required this.onCapture,
     required this.onViewAqi,
@@ -389,6 +400,8 @@ class _BottomPanel extends StatelessWidget {
 
   final dynamic reading;
   final bool capturing;
+  final AqiImagePrediction? imagePrediction;
+  final String? imagePredictionError;
   final Color accentColor;
   final VoidCallback onCapture;
   final VoidCallback onViewAqi;
@@ -396,8 +409,12 @@ class _BottomPanel extends StatelessWidget {
   String get _tipText {
     if (reading == null) return 'Loading air quality data...';
     final aqi = reading!.aqi as int;
-    if (aqi <= 50) return 'Air quality is great. Safe for all outdoor activities.';
-    if (aqi <= 100) return 'Sensitive groups should limit prolonged outdoor exertion.';
+    if (aqi <= 50) {
+      return 'Air quality is great. Safe for all outdoor activities.';
+    }
+    if (aqi <= 100) {
+      return 'Sensitive groups should limit prolonged outdoor exertion.';
+    }
     if (aqi <= 150) return 'Limit outdoor time. Wear a mask if going outside.';
     if (aqi <= 200) return 'Avoid outdoor activities. Keep windows closed.';
     return 'Health emergency. Stay indoors — do not go outside.';
@@ -445,6 +462,18 @@ class _BottomPanel extends StatelessWidget {
             const SizedBox(height: 16),
           ],
 
+          if (capturing ||
+              imagePrediction != null ||
+              imagePredictionError != null) ...[
+            _ImagePredictionPanel(
+              prediction: imagePrediction,
+              error: imagePredictionError,
+              loading: capturing,
+              fallbackColor: accentColor,
+            ),
+            const SizedBox(height: 16),
+          ],
+
           // Tip text
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -455,8 +484,7 @@ class _BottomPanel extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline_rounded,
-                    color: accentColor, size: 14),
+                Icon(Icons.info_outline_rounded, color: accentColor, size: 14),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -512,7 +540,7 @@ class _BottomPanel extends StatelessWidget {
                               color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          capturing ? 'Capturing...' : 'Capture & Report',
+                          capturing ? 'Classifying...' : 'Capture & Classify',
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -534,8 +562,7 @@ class _BottomPanel extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.07),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.15)),
+                      border: Border.all(color: Colors.white.withOpacity(0.15)),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -560,6 +587,158 @@ class _BottomPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ImagePredictionPanel extends StatelessWidget {
+  const _ImagePredictionPanel({
+    required this.prediction,
+    required this.error,
+    required this.loading,
+    required this.fallbackColor,
+  });
+
+  final AqiImagePrediction? prediction;
+  final String? error;
+  final bool loading;
+  final Color fallbackColor;
+
+  Color _colorForLabel(String label) {
+    final value = label.toLowerCase();
+    if (value.contains('good')) return AppColors.success;
+    if (value.contains('moderate')) return const Color(0xFFFFD700);
+    if (value.contains('sensitive')) return AppColors.warning;
+    if (value.contains('very')) return AppColors.danger;
+    if (value.contains('severe')) return AppColors.critical;
+    if (value.contains('unhealthy')) return const Color(0xFFFF6D00);
+    return fallbackColor;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return _panelShell(
+        color: fallbackColor,
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Running image AQI model...',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.82),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (error != null) {
+      return _panelShell(
+        color: AppColors.danger,
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded,
+                color: AppColors.danger, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                error!,
+                style: const TextStyle(
+                  color: AppColors.danger,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final result = prediction;
+    if (result == null) return const SizedBox.shrink();
+
+    final label = result.assistedLabel ?? result.predictedLabel;
+    final color = _colorForLabel(label);
+    final imagePct = (result.confidence * 100).toStringAsFixed(1);
+
+    return _panelShell(
+      color: color,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.image_search_rounded, color: color, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'IMAGE AQI MODEL',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Image prediction: ${result.predictedLabel} ($imagePct%)',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.76),
+              fontSize: 12,
+            ),
+          ),
+          if (result.numericalLabel != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Live AQI reference: ${result.numericalLabel}',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.58),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _panelShell({
+    required Color color,
+    required Widget child,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.24)),
+      ),
+      child: child,
     );
   }
 }
@@ -684,8 +863,7 @@ class _GlassBtn extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.45),
           shape: BoxShape.circle,
-          border:
-              Border.all(color: Colors.white.withOpacity(0.15)),
+          border: Border.all(color: Colors.white.withOpacity(0.15)),
         ),
         child: Icon(icon, color: Colors.white, size: 20),
       ),

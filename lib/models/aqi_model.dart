@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 enum AqiCategory {
-  good,        // 0-50    — Green
-  moderate,    // 51-100  — Yellow
-  sensitive,   // 101-150 — Orange
-  unhealthy,   // 151-200 — Red
+  good, // 0-50    — Green
+  moderate, // 51-100  — Yellow
+  sensitive, // 101-150 — Orange
+  unhealthy, // 151-200 — Red
   veryUnhealthy, // 201-300 — Purple
-  hazardous,   // 301-500 — Maroon
+  hazardous, // 301-500 — Maroon
 }
 
 class AqiReading {
@@ -16,6 +16,7 @@ class AqiReading {
   final double pm10;
   final double o3;
   final double no2;
+  final double so2;
   final double co;
   final DateTime timestamp;
   final String city;
@@ -27,6 +28,7 @@ class AqiReading {
     required this.pm10,
     required this.o3,
     required this.no2,
+    required this.so2,
     required this.co,
     required this.timestamp,
     required this.city,
@@ -42,6 +44,7 @@ class AqiReading {
       pm10: (json['pm10'] as num?)?.toDouble() ?? 0,
       o3: (json['o3'] as num?)?.toDouble() ?? 0,
       no2: (json['no2'] as num?)?.toDouble() ?? 0,
+      so2: (json['so2'] as num?)?.toDouble() ?? 0,
       co: (json['co'] as num?)?.toDouble() ?? 0,
       timestamp: _dateTimeFromJson(json['timestamp']) ?? DateTime.now(),
       city: json['city'] as String,
@@ -55,6 +58,7 @@ class AqiReading {
         'pm10': pm10,
         'o3': o3,
         'no2': no2,
+        'so2': so2,
         'co': co,
         'timestamp': timestamp.toIso8601String(),
         'city': city,
@@ -62,12 +66,18 @@ class AqiReading {
 
   Color get color {
     switch (category) {
-      case AqiCategory.good: return const Color(0xFF00C853);
-      case AqiCategory.moderate: return const Color(0xFFFFD600);
-      case AqiCategory.sensitive: return const Color(0xFFFF6D00);
-      case AqiCategory.unhealthy: return const Color(0xFFD50000);
-      case AqiCategory.veryUnhealthy: return const Color(0xFF6A1B9A);
-      case AqiCategory.hazardous: return const Color(0xFF4A0000);
+      case AqiCategory.good:
+        return const Color(0xFF00C853);
+      case AqiCategory.moderate:
+        return const Color(0xFFFFD600);
+      case AqiCategory.sensitive:
+        return const Color(0xFFFF6D00);
+      case AqiCategory.unhealthy:
+        return const Color(0xFFD50000);
+      case AqiCategory.veryUnhealthy:
+        return const Color(0xFF6A1B9A);
+      case AqiCategory.hazardous:
+        return const Color(0xFF4A0000);
     }
   }
 
@@ -78,6 +88,7 @@ class AqiReading {
       ('PM10', pm10),
       ('O3', o3),
       ('NO2', no2),
+      ('SO2', so2),
       ('CO', co),
     ];
     pairs.sort((a, b) => b.$2.compareTo(a.$2));
@@ -88,23 +99,35 @@ class AqiReading {
 
   String get categoryLabel {
     switch (category) {
-      case AqiCategory.good: return 'Good';
-      case AqiCategory.moderate: return 'Moderate';
-      case AqiCategory.sensitive: return 'Unhealthy for Sensitive Groups';
-      case AqiCategory.unhealthy: return 'Unhealthy';
-      case AqiCategory.veryUnhealthy: return 'Very Unhealthy';
-      case AqiCategory.hazardous: return 'Hazardous';
+      case AqiCategory.good:
+        return 'Good';
+      case AqiCategory.moderate:
+        return 'Moderate';
+      case AqiCategory.sensitive:
+        return 'Unhealthy for Sensitive Groups';
+      case AqiCategory.unhealthy:
+        return 'Unhealthy';
+      case AqiCategory.veryUnhealthy:
+        return 'Very Unhealthy';
+      case AqiCategory.hazardous:
+        return 'Hazardous';
     }
   }
 
   String get healthAdvice {
     switch (category) {
-      case AqiCategory.good: return 'Air quality is satisfactory. Enjoy outdoor activities.';
-      case AqiCategory.moderate: return 'Sensitive individuals should limit prolonged outdoor exertion.';
-      case AqiCategory.sensitive: return 'People with respiratory or heart conditions should reduce outdoor activity.';
-      case AqiCategory.unhealthy: return 'Everyone should reduce prolonged outdoor exertion. Wear an N95 mask outdoors.';
-      case AqiCategory.veryUnhealthy: return 'Avoid outdoor activities. Keep windows closed. Use air purifiers if available.';
-      case AqiCategory.hazardous: return 'Health emergency. Stay indoors. Avoid all outdoor activity. Seek medical help if experiencing symptoms.';
+      case AqiCategory.good:
+        return 'Air quality is satisfactory. Enjoy outdoor activities.';
+      case AqiCategory.moderate:
+        return 'Sensitive individuals should limit prolonged outdoor exertion.';
+      case AqiCategory.sensitive:
+        return 'People with respiratory or heart conditions should reduce outdoor activity.';
+      case AqiCategory.unhealthy:
+        return 'Everyone should reduce prolonged outdoor exertion. Wear an N95 mask outdoors.';
+      case AqiCategory.veryUnhealthy:
+        return 'Avoid outdoor activities. Keep windows closed. Use air purifiers if available.';
+      case AqiCategory.hazardous:
+        return 'Health emergency. Stay indoors. Avoid all outdoor activity. Seek medical help if experiencing symptoms.';
     }
   }
 

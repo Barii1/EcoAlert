@@ -11,6 +11,22 @@ class HourlyWeatherPoint {
   final int weatherCode;
 }
 
+class DailyWeatherForecast {
+  const DailyWeatherForecast({
+    required this.date,
+    required this.tempMin,
+    required this.tempMax,
+    required this.weatherCode,
+    required this.precipitationProbability,
+  });
+
+  final DateTime date;
+  final double tempMin;
+  final double tempMax;
+  final int weatherCode;
+  final int precipitationProbability;
+}
+
 /// Current weather conditions for display in the weather widget.
 class WeatherCondition {
   const WeatherCondition({
@@ -28,6 +44,7 @@ class WeatherCondition {
     this.tempMin,
     this.tempMax,
     this.hourly = const [],
+    this.daily = const [],
   });
 
   final double temperature; // Celsius
@@ -43,8 +60,10 @@ class WeatherCondition {
   final double pressure; // hPa
   final double? tempMin;
   final double? tempMax;
+
   /// 24-hour series starting from midnight of today (one point per hour).
   final List<HourlyWeatherPoint> hourly;
+  final List<DailyWeatherForecast> daily;
 
   /// Human-readable weather description from WMO code.
   String get description {
@@ -159,7 +178,8 @@ class WeatherCondition {
     return 'NW';
   }
 
-  factory WeatherCondition.fromOpenMeteo(Map<String, dynamic> data, String city) {
+  factory WeatherCondition.fromOpenMeteo(
+      Map<String, dynamic> data, String city) {
     final current = data['current'] as Map<String, dynamic>? ?? {};
     final daily = data['daily'] as Map<String, dynamic>?;
     final hourlyData = data['hourly'] as Map<String, dynamic>?;
@@ -169,8 +189,40 @@ class WeatherCondition {
     if (daily != null) {
       final mins = daily['temperature_2m_min'] as List<dynamic>?;
       final maxs = daily['temperature_2m_max'] as List<dynamic>?;
-      if (mins != null && mins.isNotEmpty) tempMin = (mins[0] as num).toDouble();
-      if (maxs != null && maxs.isNotEmpty) tempMax = (maxs[0] as num).toDouble();
+      if (mins != null && mins.isNotEmpty) {
+        tempMin = (mins[0] as num).toDouble();
+      }
+      if (maxs != null && maxs.isNotEmpty) {
+        tempMax = (maxs[0] as num).toDouble();
+      }
+    }
+
+    final dailyForecast = <DailyWeatherForecast>[];
+    if (daily != null) {
+      final times = daily['time'] as List<dynamic>?;
+      final mins = daily['temperature_2m_min'] as List<dynamic>?;
+      final maxs = daily['temperature_2m_max'] as List<dynamic>?;
+      final codes = daily['weather_code'] as List<dynamic>?;
+      final precip = daily['precipitation_probability_max'] as List<dynamic>?;
+
+      if (times != null && mins != null && maxs != null) {
+        for (var i = 0; i < times.length; i++) {
+          if (i >= mins.length || i >= maxs.length) continue;
+          final date = DateTime.tryParse(times[i] as String? ?? '');
+          if (date == null) continue;
+          dailyForecast.add(DailyWeatherForecast(
+            date: date,
+            tempMin: (mins[i] as num?)?.toDouble() ?? 0,
+            tempMax: (maxs[i] as num?)?.toDouble() ?? 0,
+            weatherCode: (codes != null && i < codes.length)
+                ? (codes[i] as num?)?.toInt() ?? 0
+                : 0,
+            precipitationProbability: (precip != null && i < precip.length)
+                ? (precip[i] as num?)?.toInt() ?? 0
+                : 0,
+          ));
+        }
+      }
     }
 
     final hourly = <HourlyWeatherPoint>[];
@@ -208,6 +260,7 @@ class WeatherCondition {
       tempMin: tempMin,
       tempMax: tempMax,
       hourly: hourly,
+      daily: dailyForecast,
     );
   }
 }

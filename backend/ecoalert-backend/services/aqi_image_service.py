@@ -58,6 +58,43 @@ def _load_assets() -> tuple[tf.keras.Model, list[str]]:
     return _MODEL, _CLASS_NAMES
 
 
+def get_model_status() -> dict[str, Any]:
+    default_model_path, default_class_names_path = _get_default_paths()
+    model_path = _resolve_path("AQI_IMAGE_MODEL_PATH", default_model_path)
+    class_names_path = _resolve_path(
+        "AQI_IMAGE_CLASS_NAMES_PATH",
+        default_class_names_path,
+    )
+
+    status = {
+        "model_loaded": _MODEL is not None,
+        "class_names_loaded": _CLASS_NAMES is not None,
+        "model_path": str(model_path),
+        "model_exists": model_path.exists(),
+        "class_names_path": str(class_names_path),
+        "class_names_exists": class_names_path.exists(),
+        "image_size": list(IMG_SIZE),
+    }
+
+    try:
+        model, class_names = _load_assets()
+        status.update({
+            "model_loaded": True,
+            "class_names_loaded": True,
+            "num_classes": len(class_names),
+            "class_names": class_names,
+            "input_shape": list(model.input_shape),
+            "output_shape": list(model.output_shape),
+        })
+    except Exception as exc:
+        status.update({
+            "model_loaded": False,
+            "error": str(exc),
+        })
+
+    return status
+
+
 def predict_image_bytes(image_bytes: bytes, top_k: int = 3) -> dict[str, Any]:
     model, class_names = _load_assets()
 
@@ -78,9 +115,14 @@ def predict_image_bytes(image_bytes: bytes, top_k: int = 3) -> dict[str, Any]:
         {"label": class_names[i], "confidence": float(preds[i])}
         for i in top_indices
     ]
+    probabilities = {
+        class_names[i]: float(preds[i])
+        for i in range(len(class_names))
+    }
 
     return {
         "predicted_label": class_names[idx],
         "confidence": float(preds[idx]),
         "top_k": top_scores,
+        "probabilities": probabilities,
     }
