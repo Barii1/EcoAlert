@@ -143,6 +143,24 @@ class SettingsDrawer extends StatelessWidget {
               },
             ),
 
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                radius: 18,
+                backgroundColor: cardColor,
+                child: Icon(Icons.settings_outlined, color: AppColors.textSecondary, size: 18),
+              ),
+              title: Text(
+                'All Settings',
+                style: AppTextStyles.bodyPrimary.copyWith(color: cs.onSurface),
+              ),
+              trailing: Icon(Icons.chevron_right, color: cs.onSurface.withOpacity(0.4), size: 18),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/settings');
+              },
+            ),
+
             const SizedBox(height: 8),
             Divider(color: cs.onSurface.withOpacity(0.1)),
             const SizedBox(height: 8),

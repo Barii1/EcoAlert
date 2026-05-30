@@ -33,9 +33,11 @@ import 'screens/community_screen.dart';
 import 'screens/report_hazard_screen.dart';
 import 'screens/report_confirmation_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/aqi_detail_screen.dart';
 import 'screens/flood_detail_screen.dart';
 import 'screens/model_status_screen.dart';
+import 'screens/aqi_image_classify_screen.dart';
 
 import 'providers/alert_provider.dart';
 import 'providers/aqi_provider.dart';
@@ -203,21 +205,88 @@ class EcoAlertApp extends StatelessWidget {
                 '/flood-detail': (_) => const FloodDetailScreen(),
                 '/model-status': (_) => const ModelStatusScreen(),
                 '/aqi-scan': (_) => const AqiScanScreen(),
+                '/aqi-image-classify': (_) => const AqiImageClassifyScreen(),
                 '/alerts': (_) => const AlertsScreen(),
                 '/profile': (_) => const ProfileScreen(),
+                '/settings': (_) => const SettingsScreen(),
               };
 
               final pageBuilder = routes[settings.name];
               if (pageBuilder == null) return null;
               final page = pageBuilder(settings);
 
-              const slideUpRoutes = {'/alert-detail', '/aqi-detail', '/flood-detail', '/report-hazard', '/aqi-scan'};
+              const slideUpRoutes = {'/alert-detail', '/aqi-detail', '/flood-detail', '/report-hazard', '/aqi-scan', '/aqi-image-classify'};
               if (slideUpRoutes.contains(settings.name)) {
                 return SlideUpPageRoute(page: page);
               }
               return FadeThroughPageRoute(page: page);
             },
+            // Light theme
             theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.light(
+                primary: const Color(0xFF2C2C2E),
+                secondary: const Color(0xFF555558),
+                surface: const Color(0xFFF2F2F7),
+                onSurface: const Color(0xFF111111),
+                error: const Color(0xFFE03535),
+              ),
+              scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+              cardColor: Colors.white,
+              textTheme: ThemeData.light().textTheme.apply(
+                bodyColor: const Color(0xFF111111),
+                displayColor: const Color(0xFF111111),
+              ),
+              appBarTheme: const AppBarTheme(
+                centerTitle: false,
+                elevation: 0,
+                foregroundColor: Color(0xFF111111),
+                backgroundColor: Color(0xFFF2F2F7),
+              ),
+              cardTheme: CardThemeData(
+                color: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              inputDecorationTheme: InputDecorationTheme(
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+              ),
+              elevatedButtonTheme: ElevatedButtonThemeData(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2C2C2E),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              switchTheme: SwitchThemeData(
+                thumbColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.selected)
+                        ? Colors.white
+                        : const Color(0xFF888888)),
+                trackColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.selected)
+                        ? const Color(0xFF2C2C2E)
+                        : const Color(0xFFCCCCCC)),
+              ),
+            ),
+            // Dark theme
+            darkTheme: ThemeData(
               useMaterial3: true,
               colorScheme: ColorScheme.dark(
                 primary: AppColors.primary,
@@ -299,10 +368,13 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   AqiProvider? _aqiProvider;
+  LocationProvider? _locationProvider;
+  String _lastKnownCity = AppConfig.defaultCity;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
     final nextAqiProvider = context.read<AqiProvider>();
     if (!identical(_aqiProvider, nextAqiProvider)) {
       _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
@@ -313,17 +385,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _syncDangerThemeFromAqi();
       });
     }
+
+    final nextLocation = context.read<LocationProvider>();
+    if (!identical(_locationProvider, nextLocation)) {
+      _locationProvider?.removeListener(_onLocationChanged);
+      _locationProvider = nextLocation;
+      _locationProvider!.addListener(_onLocationChanged);
+      // Sync immediately in case location was fetched before this screen loaded.
+      _syncLocationToProviders();
+    }
   }
 
   @override
   void dispose() {
     _aqiProvider?.removeListener(_syncDangerThemeFromAqi);
+    _locationProvider?.removeListener(_onLocationChanged);
     super.dispose();
   }
 
   void _syncDangerThemeFromAqi() {
     final aqi = _aqiProvider?.current;
     context.read<DangerThemeProvider>().updateFromAqi(aqi);
+  }
+
+  void _onLocationChanged() => _syncLocationToProviders();
+
+  void _syncLocationToProviders() {
+    final city = _locationProvider?.currentCity ?? AppConfig.defaultCity;
+    if (city == _lastKnownCity) return;
+    _lastKnownCity = city;
+    if (!mounted) return;
+    context.read<AqiProvider>().loadForCity(city);
+    context.read<FloodProvider>().loadForCity(city);
+    context.read<WeatherProvider>().loadForCity(city);
   }
 
   @override

@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify, request
-from services.firestore_service import user_is_admin, verify_id_token
-from services.supabase_service import log_audit
-from services.supabase_service import _get_supabase  # internal use for admin queries
+from services.supabase_auth_service import verify_supabase_token
+from services.supabase_service import _get_supabase, log_audit, user_is_admin
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -14,16 +13,20 @@ def _extract_bearer_token() -> str | None:
 
 
 def _require_admin():
-    id_token = _extract_bearer_token()
-    if not id_token:
+    """
+    Verifies the Supabase JWT and checks that the user has role='admin' in profiles.
+    Returns (uid, None) on success or (None, error_response) on failure.
+    """
+    token = _extract_bearer_token()
+    if not token:
         return None, (jsonify({"error": "Missing Authorization bearer token"}), 401)
 
     try:
-        claims = verify_id_token(id_token)
+        claims = verify_supabase_token(token)
     except Exception:
         return None, (jsonify({"error": "Invalid or expired auth token"}), 401)
 
-    uid = claims.get("uid")
+    uid = claims.get("sub")
     if not uid or not user_is_admin(uid):
         return None, (jsonify({"error": "Forbidden"}), 403)
 
@@ -35,8 +38,10 @@ def get_logs():
     """
     Admin-only log query.
     Query params:
-      - type: prediction | upload | audit
+      - type:  prediction | upload | audit
       - limit: int (default 50)
+    Headers:
+      - Authorization: Bearer <supabase_access_token>
     """
     uid, auth_error = _require_admin()
     if auth_error is not None:
@@ -47,8 +52,8 @@ def get_logs():
 
     table_map = {
         "prediction": "prediction_logs",
-        "upload": "upload_logs",
-        "audit": "audit_logs",
+        "upload":     "upload_logs",
+        "audit":      "audit_logs",
     }
     table = table_map.get(log_type, "prediction_logs")
 

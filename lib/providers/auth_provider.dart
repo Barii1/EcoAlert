@@ -47,7 +47,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isUsingSupabase => _useSupabase;
 
   UserRole get currentRole => _currentUser?.role ?? UserRole.general;
-  bool get isAdmin => true; // TODO: restore to `currentRole == UserRole.admin` after Supabase roles are set
+  bool get isAdmin => currentRole == UserRole.admin;
   bool get isPremium => currentRole == UserRole.premium;
   bool get isBasic => currentRole == UserRole.registered;
 
@@ -121,6 +121,11 @@ class AuthProvider extends ChangeNotifier {
             : role == 'general'
                 ? UserRole.general
                 : UserRole.registered;
+    final rawConditions = profile?['health_conditions'];
+    final healthConditions = rawConditions is List
+        ? rawConditions.map((e) => e.toString()).toList()
+        : <String>[];
+
     return UserModel(
       id: uid,
       username: readString(['username'], fallback: 'User'),
@@ -131,7 +136,21 @@ class AuthProvider extends ChangeNotifier {
       city: readString(['city']),
       createdAt: DateTime.now(),
       role: mappedRole,
+      healthConditions: healthConditions,
     );
+  }
+
+  Future<void> updateHealthConditions(List<String> conditions) async {
+    final uid = _currentUser?.id;
+    if (uid == null || _supabaseService == null) return;
+    await _supabaseService!.updateRow(
+      SupabaseTables.profiles,
+      uid,
+      {'health_conditions': conditions},
+    );
+    _profile = {...?_profile, 'health_conditions': conditions};
+    _currentUser = _profileToUserModel(uid, _profile);
+    notifyListeners();
   }
 
   void _clearLocalAuthState() {
