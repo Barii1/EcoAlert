@@ -71,6 +71,8 @@ def predict_cloudburst():
             longitude=float(longitude),
             city=city,
         )
+        if result.get("risk_level") == "Unknown" and result.get("error"):
+            return jsonify(result), 503
         log_prediction({
             "type": "cloudburst",
             "city": result.get("city") or city,
@@ -134,6 +136,7 @@ def predict_aqi():
         "pm25": 35.2,
         "pm10": 61.8,
         "no2": 18.4,
+        "so2": 8.3,
         "o3": 22.1,
         "co": 1.1,
         "city": "Lahore"
@@ -142,7 +145,7 @@ def predict_aqi():
     data = request.get_json(silent=True) or {}
     city = data.pop("city", "")
 
-    required = ["pm25", "pm10", "no2", "o3", "co"]
+    required = ["pm25", "pm10", "no2", "so2", "o3", "co"]
     missing = [k for k in required if k not in data]
     if missing:
         return jsonify({"error": f"Missing fields: {missing}"}), 400

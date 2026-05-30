@@ -9,11 +9,14 @@ Widget getWeatherIcon(int code) {
   switch (code) {
     case 0:
     case 1:
-      return const Icon(Icons.wb_sunny_rounded, color: Color(0xFFFFB74D), size: 24);
+      return const Icon(Icons.wb_sunny_rounded,
+          color: Color(0xFFFFB74D), size: 24);
     case 2:
-      return const Icon(Icons.cloud_queue_rounded, color: AppColors.textPrimary, size: 24);
+      return const Icon(Icons.cloud_queue_rounded,
+          color: AppColors.textPrimary, size: 24);
     case 3:
-      return const Icon(Icons.cloud_rounded, color: AppColors.textPrimary, size: 24);
+      return const Icon(Icons.cloud_rounded,
+          color: AppColors.textPrimary, size: 24);
     case 45:
     case 48:
       return const Icon(Icons.foggy, color: AppColors.textSecondary, size: 24);
@@ -22,7 +25,8 @@ Widget getWeatherIcon(int code) {
     case 55:
     case 56:
     case 57:
-      return const Icon(Icons.grain_rounded, color: AppColors.primary, size: 24);
+      return const Icon(Icons.grain_rounded,
+          color: AppColors.primary, size: 24);
     case 61:
     case 63:
     case 65:
@@ -31,20 +35,24 @@ Widget getWeatherIcon(int code) {
     case 80:
     case 81:
     case 82:
-      return const Icon(Icons.water_drop_rounded, color: AppColors.primary, size: 24);
+      return const Icon(Icons.water_drop_rounded,
+          color: AppColors.primary, size: 24);
     case 71:
     case 73:
     case 75:
     case 77:
     case 85:
     case 86:
-      return const Icon(Icons.ac_unit_rounded, color: Color(0xFFB3E5FC), size: 24);
+      return const Icon(Icons.ac_unit_rounded,
+          color: Color(0xFFB3E5FC), size: 24);
     case 95:
     case 96:
     case 99:
-      return const Icon(Icons.thunderstorm_rounded, color: AppColors.warning, size: 24);
+      return const Icon(Icons.thunderstorm_rounded,
+          color: AppColors.warning, size: 24);
     default:
-      return const Icon(Icons.cloud_rounded, color: AppColors.textPrimary, size: 24);
+      return const Icon(Icons.cloud_rounded,
+          color: AppColors.textPrimary, size: 24);
   }
 }
 
@@ -146,7 +154,8 @@ class WeatherForecastWidget extends StatelessWidget {
           children: [
             Text(
               'Forecast unavailable',
-              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+              style:
+                  AppTextStyles.body.copyWith(color: AppColors.textSecondary),
             ),
             if (onRetry != null) ...[
               const SizedBox(height: AppSpacing.p8),
@@ -162,6 +171,8 @@ class WeatherForecastWidget extends StatelessWidget {
   }
 
   Widget _buildForecastStrip(WeatherCondition weather) {
+    final forecasts = weather.daily.take(3).toList();
+
     return ListView.separated(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -169,9 +180,16 @@ class WeatherForecastWidget extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.p12),
       itemBuilder: (_, index) {
         final label = _dayLabel(index);
-        final low = weather.tempMin?.round() ?? weather.temperature.round();
-        final high = weather.tempMax?.round() ?? weather.temperature.round();
-        final rainProbability = _rainChanceFromCode(weather.weatherCode);
+        final forecast = index < forecasts.length ? forecasts[index] : null;
+        final low = forecast?.tempMin.round() ??
+            weather.tempMin?.round() ??
+            weather.temperature.round();
+        final high = forecast?.tempMax.round() ??
+            weather.tempMax?.round() ??
+            weather.temperature.round();
+        final weatherCode = forecast?.weatherCode ?? weather.weatherCode;
+        final rainProbability = forecast?.precipitationProbability ??
+            _rainChanceFromCode(weatherCode);
 
         return Container(
           width: 150,
@@ -192,7 +210,7 @@ class WeatherForecastWidget extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.p8),
-              getWeatherIcon(weather.weatherCode),
+              getWeatherIcon(weatherCode),
               const SizedBox(height: AppSpacing.p8),
               Text(
                 '$high° / $low°C',

@@ -9,6 +9,7 @@ import '../models/alert_model.dart';
 import '../providers/alert_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/aqi_provider.dart';
+import '../providers/location_provider.dart';
 import '../providers/flood_provider.dart';
 import '../providers/weather_provider.dart';
 import '../providers/danger_theme_provider.dart';
@@ -48,11 +49,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
+      final location = Provider.of<LocationProvider>(context, listen: false);
+      final aqiProvider = Provider.of<AqiProvider>(context, listen: false);
+      final weatherProvider =
+          Provider.of<WeatherProvider>(context, listen: false);
+      final alertProvider = Provider.of<AlertProvider>(context, listen: false);
+      final floodProvider = Provider.of<FloodProvider>(context, listen: false);
       final city = auth.currentUser?.city ?? 'Lahore';
-      Provider.of<AlertProvider>(context, listen: false).fetchAlerts();
-      Provider.of<AqiProvider>(context, listen: false).loadForCity(city);
-      Provider.of<FloodProvider>(context, listen: false).loadForCity(city);
-      Provider.of<WeatherProvider>(context, listen: false).loadForCity(city);
+      location.getCurrentLocation().then((_) {
+        if (!mounted) return;
+        final pos = location.currentPosition;
+        if (pos != null) {
+          aqiProvider.loadForLocation(
+            pos,
+            cityLabel: location.currentCity,
+          );
+          weatherProvider.loadForLocation(
+            pos,
+            cityLabel: location.currentCity,
+          );
+        } else {
+          aqiProvider.loadForCity(city);
+          weatherProvider.loadForCity(city);
+        }
+      });
+      alertProvider.fetchAlerts();
+      floodProvider.loadForCity(city);
     });
   }
 
@@ -88,16 +110,37 @@ class _HomeScreenState extends State<HomeScreen> {
                   onRefresh: () async {
                     final auth =
                         Provider.of<AuthProvider>(context, listen: false);
+                    final location =
+                        Provider.of<LocationProvider>(context, listen: false);
+                    final alertProvider =
+                        Provider.of<AlertProvider>(context, listen: false);
+                    final aqiProvider =
+                        Provider.of<AqiProvider>(context, listen: false);
+                    final weatherProvider =
+                        Provider.of<WeatherProvider>(context, listen: false);
+                    final floodProvider =
+                        Provider.of<FloodProvider>(context, listen: false);
                     final city = auth.currentUser?.city ?? 'Lahore';
+                    await location.getCurrentLocation();
+                    if (!mounted) return;
+                    final pos = location.currentPosition;
                     await Future.wait([
-                      Provider.of<AlertProvider>(context, listen: false)
-                          .fetchAlerts(),
-                      Provider.of<AqiProvider>(context, listen: false)
-                          .loadForCity(city),
-                      Provider.of<FloodProvider>(context, listen: false)
-                          .loadForCity(city),
-                      Provider.of<WeatherProvider>(context, listen: false)
-                          .loadForCity(city),
+                      alertProvider.fetchAlerts(),
+                      if (pos != null)
+                        aqiProvider.loadForLocation(
+                          pos,
+                          cityLabel: location.currentCity,
+                        )
+                      else
+                        aqiProvider.loadForCity(city),
+                      if (pos != null)
+                        weatherProvider.loadForLocation(
+                          pos,
+                          cityLabel: location.currentCity,
+                        )
+                      else
+                        weatherProvider.loadForCity(city),
+                      floodProvider.loadForCity(city),
                     ]);
                   },
                   child: ListView(
@@ -157,8 +200,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ─────────────────── HEADER ───────────────────
-  Widget _buildHeader(
-      BuildContext context, AuthProvider authProvider, DangerThemeProvider dangerTheme) {
+  Widget _buildHeader(BuildContext context, AuthProvider authProvider,
+      DangerThemeProvider dangerTheme) {
     return Container(
       padding: const EdgeInsets.only(
         left: AppSpacing.p20,
@@ -409,15 +452,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             : aqi.hasError && aqi.current == null
                                 ? _buildErrorCard(
                                     aqi.errorMessage ?? 'Error', aqi.retry)
-                                    : aqi.current != null
-                              ? _withCachedBadge(
-                                showBadge: aqi.isFromCache,
-                                child: AqiCard(
-                                  reading: aqi.current!,
-                                  onTap: () => Navigator.pushNamed(
-                                    context, '/aqi-detail',
-                                    arguments: aqi.current),
-                                ),
+                                : aqi.current != null
+                                    ? _withCachedBadge(
+                                        showBadge: aqi.isFromCache,
+                                        child: AqiCard(
+                                          reading: aqi.current!,
+                                          onTap: () => Navigator.pushNamed(
+                                              context, '/aqi-detail',
+                                              arguments: aqi.current),
+                                        ),
                                       )
                                     : const SizedBox.shrink(),
                       ),
@@ -429,15 +472,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             : flood.hasError && flood.risk == null
                                 ? _buildErrorCard(
                                     flood.errorMessage ?? 'Error', flood.retry)
-                                    : flood.risk != null
-                              ? _withCachedBadge(
-                                showBadge: flood.isFromCache,
-                                child: FloodRiskCard(
-                                  risk: flood.risk!,
-                                  onTap: () => Navigator.pushNamed(
-                                    context, '/flood-detail',
-                                    arguments: flood.risk),
-                                ),
+                                : flood.risk != null
+                                    ? _withCachedBadge(
+                                        showBadge: flood.isFromCache,
+                                        child: FloodRiskCard(
+                                          risk: flood.risk!,
+                                          onTap: () => Navigator.pushNamed(
+                                              context, '/flood-detail',
+                                              arguments: flood.risk),
+                                        ),
                                       )
                                     : _buildLoadingCard(),
                       ),
@@ -484,7 +527,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Consumer<AlertProvider>(
                 builder: (context, alertProvider, _) {
-                  if (alertProvider.alerts.isEmpty) return const SizedBox.shrink();
+                  if (alertProvider.alerts.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
                   return InkWell(
                     borderRadius: BorderRadius.circular(6),
                     onTap: () => Navigator.push(
@@ -492,7 +537,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       MaterialPageRoute(builder: (_) => const AlertsScreen()),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
                       child: Text(
                         'View all',
                         style: AppTextStyles.label.copyWith(
@@ -568,17 +614,19 @@ class _HomeScreenState extends State<HomeScreen> {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
-                children: alerts.map((alert) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _AlertTile(
-                    model: alert,
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      '/alert-detail',
-                      arguments: AlertItem.fromAlertModel(alert),
-                    ),
-                  ),
-                )).toList(),
+                children: alerts
+                    .map((alert) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _AlertTile(
+                            model: alert,
+                            onTap: () => Navigator.pushNamed(
+                              context,
+                              '/alert-detail',
+                              arguments: AlertItem.fromAlertModel(alert),
+                            ),
+                          ),
+                        ))
+                    .toList(),
               ),
             );
           },
@@ -612,8 +660,7 @@ class _HomeScreenState extends State<HomeScreen> {
               label: 'AQI Image Scan',
               sublabel: 'ML air quality scan',
               color: AppColors.info,
-              onTap: () =>
-                  Navigator.pushNamed(context, '/aqi-image-classify'),
+              onTap: () => Navigator.pushNamed(context, '/aqi-image-classify'),
             ),
           ),
           const SizedBox(width: 12),
@@ -653,132 +700,132 @@ class _HomeScreenState extends State<HomeScreen> {
             MaterialPageRoute(builder: (_) => const MapScreen()),
           ),
           child: Container(
-          height: 140,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radius20),
-            border: Border.all(color: AppColors.borderSubtle),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.bgElevated,
-                AppColors.primary.withOpacity(0.06),
-              ],
-            ),
-          ),
-          child: Stack(
-            children: [
-              // Subtle grid pattern
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppSpacing.radius20),
-                  child: CustomPaint(painter: _GridPatternPainter()),
-                ),
+            height: 140,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppSpacing.radius20),
+              border: Border.all(color: AppColors.borderSubtle),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.bgElevated,
+                  AppColors.primary.withOpacity(0.06),
+                ],
               ),
-              // Gradient overlay
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
+            ),
+            child: Stack(
+              children: [
+                // Subtle grid pattern
+                Positioned.fill(
+                  child: ClipRRect(
                     borderRadius: BorderRadius.circular(AppSpacing.radius20),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.5),
+                    child: CustomPaint(painter: _GridPatternPainter()),
+                  ),
+                ),
+                // Gradient overlay
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppSpacing.radius20),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.5),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Top-right badge
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: AppColors.success,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Live',
+                          style: AppTextStyles.label.copyWith(
+                            color: Colors.white,
+                            fontSize: 9,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-              ),
-              // Top-right badge
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: Colors.white12),
-                  ),
+                // Bottom content
+                Positioned(
+                  left: 16,
+                  bottom: 14,
+                  right: 16,
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: AppColors.success,
-                          shape: BoxShape.circle,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hazard Map',
+                            style: AppTextStyles.titleLarge.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              _buildMapTag(aqiValue != null
+                                  ? 'AQI $aqiValue'
+                                  : 'AQI --'),
+                              const SizedBox(width: 6),
+                              _buildMapTag(floodPercent != null
+                                  ? 'Flood $floodPercent%'
+                                  : 'Flood --'),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Live',
-                        style: AppTextStyles.label.copyWith(
-                          color: Colors.white,
-                          fontSize: 9,
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryGlow,
+                              blurRadius: 8,
+                            ),
+                          ],
                         ),
+                        child: const Icon(Icons.arrow_forward_rounded,
+                            color: AppColors.textInverse, size: 18),
                       ),
                     ],
                   ),
                 ),
-              ),
-              // Bottom content
-              Positioned(
-                left: 16,
-                bottom: 14,
-                right: 16,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hazard Map',
-                          style: AppTextStyles.titleLarge.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            _buildMapTag(aqiValue != null
-                                ? 'AQI $aqiValue'
-                                : 'AQI --'),
-                            const SizedBox(width: 6),
-                            _buildMapTag(floodPercent != null
-                                ? 'Flood $floodPercent%'
-                                : 'Flood --'),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primaryGlow,
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.arrow_forward_rounded,
-                          color: AppColors.textInverse, size: 18),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         ),
       ),
@@ -911,8 +958,8 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.textSecondary, size: 28),
           const SizedBox(height: 8),
           Text(message,
-              style: AppTextStyles.body
-                  .copyWith(color: AppColors.textSecondary)),
+              style:
+                  AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
           TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
@@ -1013,7 +1060,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   DateTime? _latestDataTimestamp(BuildContext context) {
     final aqiTimestamp = context.watch<AqiProvider>().current?.timestamp;
-    final weatherTimestamp = context.watch<WeatherProvider>().current?.timestamp;
+    final weatherTimestamp =
+        context.watch<WeatherProvider>().current?.timestamp;
 
     if (aqiTimestamp == null) return weatherTimestamp;
     if (weatherTimestamp == null) return aqiTimestamp;
@@ -1230,44 +1278,44 @@ class _QuickActionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSpacing.radius16),
         onTap: onTap,
         child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.bgCard,
-          borderRadius: BorderRadius.circular(AppSpacing.radius16),
-          border: Border.all(color: AppColors.borderSubtle),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.bgCard,
+            borderRadius: BorderRadius.circular(AppSpacing.radius16),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 22),
               ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: AppTextStyles.titleMed.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: AppTextStyles.titleMed.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  Text(
-                    sublabel,
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textSecondary, fontSize: 10),
-                  ),
-                ],
+                    Text(
+                      sublabel,
+                      style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecondary, fontSize: 10),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );

@@ -24,6 +24,7 @@ import math
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
+from collections import defaultdict
 
 import requests
 
@@ -40,11 +41,15 @@ MODEL_CANDIDATES = [
 ]
 
 AQI_MODEL_CANDIDATES = [
+    _REPO_ROOT / "AQI" / "models" / "best_aqi_openmeteo_model.pkl",
+    _HERE.parent / "models" / "best_aqi_openmeteo_model.pkl",
     _REPO_ROOT / "AQI" / "models" / "best_aqi_numerical_model.pkl",
     _HERE.parent / "models" / "best_aqi_numerical_model.pkl",
 ]
 
 AQI_METADATA_CANDIDATES = [
+    _REPO_ROOT / "AQI" / "models" / "aqi_openmeteo_metadata.json",
+    _HERE.parent / "models" / "aqi_openmeteo_metadata.json",
     _REPO_ROOT / "AQI" / "models" / "aqi_numerical_metadata.json",
     _HERE.parent / "models" / "aqi_numerical_metadata.json",
 ]
@@ -53,14 +58,12 @@ AQI_METADATA_CANDIDATES = [
 FEATURE_COLS = ["temperature", "humidity", "pressure", "cloud_cover", "wind_speed", "dew_point"]
 
 AQI_FEATURE_COLS = [
-    "pm25",
-    "pm10",
-    "no2",
-    "o3",
-    "co",
-    "temperature",
-    "humidity",
-    "wind_speed",
+    "components_co",
+    "components_no2",
+    "components_so2",
+    "components_o3",
+    "components_pm2_5",
+    "components_pm10",
 ]
 
 # ── Risk thresholds (from cloudburst/src/config.py) ──────────────────────
@@ -85,7 +88,7 @@ OPEN_METEO_HOURLY_VARS = [
     "dew_point_2m",
     "pressure_msl",
     "cloud_cover",
-    "wind_speed_10m",
+    "wind_speed_100m",
 ]
 
 AQI_OPEN_METEO_CURRENT_VARS = [
@@ -274,8 +277,17 @@ class ModelService:
             "wind_speed_unit": "kmh",
         }
 
-        resp = requests.get(OPEN_METEO_FORECAST_URL, params=params, timeout=15)
-        resp.raise_for_status()
+        last_error = None
+        for _ in range(2):
+            try:
+                resp = requests.get(OPEN_METEO_FORECAST_URL, params=params, timeout=15)
+                resp.raise_for_status()
+                break
+            except requests.RequestException as exc:
+                last_error = exc
+        else:
+            raise last_error
+
         data = resp.json()
 
         hourly = data.get("hourly", {})
@@ -283,19 +295,37 @@ class ModelService:
         if n == 0:
             raise ValueError("Open-Meteo returned empty hourly data")
 
-        def mean(lst):
-            vals = [v for v in lst if v is not None]
+        def mean(values):
+            vals = [v for v in values if v is not None]
             return sum(vals) / len(vals) if vals else 0.0
 
-        raw_cloud = mean(hourly.get("cloud_cover", []))
-        # Partner's code converts 0-100 percentage to 0-8 scale
-        cloud_cover_scaled = (raw_cloud / 100.0) * 8.0
+        rows_by_date = defaultdict(lambda: defaultdict(list))
+        times = hourly.get("time", [])
+        for index, timestamp in enumerate(times):
+            date_key = str(timestamp).split("T", 1)[0]
+            for api_key in OPEN_METEO_HOURLY_VARS:
+                values = hourly.get(api_key, [])
+                if index < len(values):
+                    rows_by_date[date_key][api_key].append(values[index])
 
-        temperature = mean(hourly.get("temperature_2m", []))
-        humidity    = mean(hourly.get("relative_humidity_2m", []))
-        dew_point   = mean(hourly.get("dew_point_2m", [])) or self._calc_dew_point(temperature, humidity)
-        pressure    = mean(hourly.get("pressure_msl", []))
-        wind_speed  = mean(hourly.get("wind_speed_10m", []))
+        if not rows_by_date:
+            raise ValueError("Open-Meteo returned no hourly rows")
+
+        latest_date = sorted(rows_by_date.keys())[-1]
+        daily = rows_by_date[latest_date]
+
+        raw_cloud = mean(daily.get("cloud_cover", []))
+        cloud_cover_scaled = (
+            (raw_cloud / 100.0) * 8.0
+            if raw_cloud > 10
+            else raw_cloud
+        )
+
+        temperature = mean(daily.get("temperature_2m", []))
+        humidity    = mean(daily.get("relative_humidity_2m", []))
+        dew_point   = mean(daily.get("dew_point_2m", [])) or self._calc_dew_point(temperature, humidity)
+        pressure    = mean(daily.get("pressure_msl", []))
+        wind_speed  = mean(daily.get("wind_speed_100m", []))
 
         features = {
             "temperature": round(temperature, 3),
@@ -496,6 +526,25 @@ class ModelService:
 
     def _normalize_aqi_features(self, features: dict) -> dict:
         f = dict(features)
+        aliases = {
+            "components_pm2_5": ["pm25", "pm2_5"],
+            "components_pm10": ["pm10"],
+            "components_no2": ["no2"],
+            "components_o3": ["o3"],
+            "components_co": ["co"],
+            "components_so2": ["so2"],
+            "components_no": ["no"],
+            "components_nh3": ["nh3"],
+        }
+
+        for target, sources in aliases.items():
+            if target in f and f[target] not in (None, ""):
+                continue
+            for source in sources:
+                if source in f and f[source] not in (None, ""):
+                    f[target] = f[source]
+                    break
+
         for key in self._aqi_feature_cols:
             value = f.get(key, 0)
             try:

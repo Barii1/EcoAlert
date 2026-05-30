@@ -59,7 +59,8 @@ void main() async {
 
   // Firebase — FCM push notifications only.
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform);
     debugPrint('[EcoAlert] Firebase initialized (FCM only)');
   } catch (e) {
     debugPrint('[EcoAlert] Firebase init failed (FCM unavailable): $e');
@@ -86,7 +87,8 @@ void main() async {
 
   final alertProvider = AlertProvider(supabaseService: supabaseService);
   final reportProvider = ReportProvider(supabaseService: supabaseService);
-  final hazardZoneProvider = HazardZoneProvider(supabaseService: supabaseService);
+  final hazardZoneProvider =
+      HazardZoneProvider(supabaseService: supabaseService);
 
   authProvider.onAuthLoginSuccess = () {
     final user = authProvider.currentUser;
@@ -164,13 +166,16 @@ class EcoAlertApp extends StatelessWidget {
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
         ChangeNotifierProvider<AlertProvider>.value(value: alertProvider),
-        ChangeNotifierProvider(create: (_) => AqiProvider()..loadForCity('Lahore')),
-        ChangeNotifierProvider(create: (_) => FloodProvider()..loadForCity('Lahore')),
-        ChangeNotifierProvider(create: (_) => WeatherProvider()..loadForCity('Lahore')),
+        ChangeNotifierProvider(create: (_) => AqiProvider()),
+        ChangeNotifierProvider(
+            create: (_) => FloodProvider()..loadForCity('Lahore')),
+        ChangeNotifierProvider(
+            create: (_) => WeatherProvider()..loadForCity('Lahore')),
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (_) => DangerThemeProvider()),
         ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
-        ChangeNotifierProvider<HazardZoneProvider>.value(value: hazardZoneProvider),
+        ChangeNotifierProvider<HazardZoneProvider>.value(
+            value: hazardZoneProvider),
         ChangeNotifierProvider(create: (_) => CommunityProvider()),
       ],
       child: Consumer<ThemeProvider>(
@@ -214,7 +219,14 @@ class EcoAlertApp extends StatelessWidget {
               if (pageBuilder == null) return null;
               final page = pageBuilder(settings);
 
-              const slideUpRoutes = {'/alert-detail', '/aqi-detail', '/flood-detail', '/report-hazard', '/aqi-scan', '/aqi-image-classify'};
+              const slideUpRoutes = {
+                '/alert-detail',
+                '/aqi-detail',
+                '/flood-detail',
+                '/report-hazard',
+                '/aqi-scan',
+                '/aqi-image-classify'
+              };
               if (slideUpRoutes.contains(settings.name)) {
                 return SlideUpPageRoute(page: page);
               }
@@ -233,9 +245,9 @@ class EcoAlertApp extends StatelessWidget {
               scaffoldBackgroundColor: AppColors.bgPrimary,
               cardColor: AppColors.bgCard,
               textTheme: ThemeData.dark().textTheme.apply(
-                bodyColor: AppColors.textPrimary,
-                displayColor: AppColors.textPrimary,
-              ),
+                    bodyColor: AppColors.textPrimary,
+                    displayColor: AppColors.textPrimary,
+                  ),
               appBarTheme: const AppBarTheme(
                 centerTitle: false,
                 elevation: 0,

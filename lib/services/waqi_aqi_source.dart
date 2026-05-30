@@ -14,7 +14,11 @@ class WaqiAqiSource implements AqiDataSource {
   ));
 
   @override
-  Future<AqiReading> fetchCurrent(String city) async {
+  Future<AqiReading> fetchCurrent(
+    String city, {
+    double? latitude,
+    double? longitude,
+  }) async {
     if (AppConfig.waqiToken.isEmpty) {
       throw Exception('WAQI API token is not configured.');
     }
@@ -43,6 +47,7 @@ class WaqiAqiSource implements AqiDataSource {
       pm10: _extractPollutant(iaqi, 'pm10'),
       o3: _extractPollutant(iaqi, 'o3'),
       no2: _extractPollutant(iaqi, 'no2'),
+      so2: _extractPollutant(iaqi, 'so2'),
       co: _extractPollutant(iaqi, 'co'),
       timestamp: DateTime.now(),
       city: cityName,
@@ -50,13 +55,23 @@ class WaqiAqiSource implements AqiDataSource {
   }
 
   @override
-  Future<List<HourlyAqiPoint>> fetchHourly(String city, {int hours = 24}) async {
+  Future<List<HourlyAqiPoint>> fetchHourly(
+    String city, {
+    int hours = 24,
+    double? latitude,
+    double? longitude,
+  }) async {
     try {
       return await _fetchHourlyFromOpenMeteo(city, hours);
     } catch (e) {
-      debugPrint('[WaqiAqiSource] Open-Meteo hourly failed: $e — using synthetic fallback');
+      debugPrint(
+          '[WaqiAqiSource] Open-Meteo hourly failed: $e — using synthetic fallback');
       try {
-        final current = await fetchCurrent(city);
+        final current = await fetchCurrent(
+          city,
+          latitude: latitude,
+          longitude: longitude,
+        );
         return _syntheticHourly(current, hours);
       } catch (_) {
         rethrow;
@@ -64,7 +79,8 @@ class WaqiAqiSource implements AqiDataSource {
     }
   }
 
-  Future<List<HourlyAqiPoint>> _fetchHourlyFromOpenMeteo(String city, int hours) async {
+  Future<List<HourlyAqiPoint>> _fetchHourlyFromOpenMeteo(
+      String city, int hours) async {
     final coords = CityMappings.cityCoords[city] ??
         CityMappings.cityCoords.entries
             .firstWhere(
@@ -100,7 +116,9 @@ class WaqiAqiSource implements AqiDataSource {
       points.add(HourlyAqiPoint(hour: dt, aqi: aqiVal));
     }
 
-    if (points.isEmpty) throw Exception('No hourly AQI data returned from Open-Meteo');
+    if (points.isEmpty) {
+      throw Exception('No hourly AQI data returned from Open-Meteo');
+    }
     return points;
   }
 
