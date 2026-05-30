@@ -257,6 +257,27 @@ class _AdminHeader extends StatelessWidget {
                 color: _kText, fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const Spacer(),
+          GestureDetector(
+            onTap: () => Navigator.pushReplacementNamed(context, '/navigation'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: _kCard,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _kBorder),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.phone_android_rounded, color: _kSub, size: 13),
+                  SizedBox(width: 5),
+                  Text('User App',
+                      style: TextStyle(color: _kSub, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
           if (backendOnline != null)
             _StatusPill(
               online: backendOnline!,
