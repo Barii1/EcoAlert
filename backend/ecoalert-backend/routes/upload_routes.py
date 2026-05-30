@@ -1,24 +1,22 @@
-﻿import io
+import io
 
 from flask import Blueprint, jsonify, request
 from PIL import Image
-from services.firestore_service import (
-    report_belongs_to_user,
-    update_report_image_urls,
-    update_user_profile_picture,
-    user_is_admin,
-    verify_id_token,
-)
+from services.supabase_auth_service import verify_supabase_token
 from services.supabase_service import (
     delete_report_image_paths,
     log_upload,
+    report_belongs_to_user,
+    update_report_image_urls,
+    update_user_profile_picture,
     upload_profile_picture,
     upload_report_image,
+    user_is_admin,
 )
 
 upload_bp = Blueprint("upload", __name__)
 
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
@@ -30,16 +28,21 @@ def _extract_bearer_token() -> str | None:
 
 
 def _require_authenticated_user(target_uid: str):
-    id_token = _extract_bearer_token()
-    if not id_token:
+    """
+    Verifies the Supabase JWT from the Authorization header.
+    Returns (actor_uid, None) on success or (None, error_response) on failure.
+    The caller is allowed if their uid matches target_uid OR they are an admin.
+    """
+    token = _extract_bearer_token()
+    if not token:
         return None, (jsonify({"error": "Missing Authorization bearer token"}), 401)
 
     try:
-        claims = verify_id_token(id_token)
+        claims = verify_supabase_token(token)
     except Exception:
         return None, (jsonify({"error": "Invalid or expired auth token"}), 401)
 
-    actor_uid = claims.get("uid")
+    actor_uid = claims.get("sub")
     if actor_uid != target_uid and not user_is_admin(actor_uid):
         return None, (jsonify({"error": "Forbidden"}), 403)
 
@@ -67,7 +70,10 @@ def upload_report_images():
     Accepts multiple images for a hazard report.
     Flutter sends: multipart/form-data with fields:
       - report_id: string
-      - images: one or more image files
+      - uid:       string  (reporter's Supabase user UUID)
+      - images:    one or more image files
+    Headers:
+      - Authorization: Bearer <supabase_access_token>
     Returns: { "imageUrls": [...] }
     """
     report_id = request.form.get("report_id")
@@ -101,7 +107,6 @@ def upload_report_images():
                 return jsonify({"error": f"Invalid file type: {file.content_type}"}), 400
 
             file_bytes = file.read()
-
             if len(file_bytes) > MAX_FILE_SIZE:
                 return jsonify({"error": "File exceeds 5MB limit"}), 400
 
@@ -110,7 +115,6 @@ def upload_report_images():
             uploaded_paths.append(f"{report_id}/image_{index}.jpg")
             image_urls.append(url)
 
-        # Write URLs back to Firestore
         update_report_image_urls(report_id, image_urls)
         log_upload({
             "type": "report_images",
@@ -119,7 +123,6 @@ def upload_report_images():
             "count": len(image_urls),
         })
     except Exception:
-        # Clean up only files uploaded in this request.
         delete_report_image_paths(uploaded_paths)
         return jsonify({"error": "Failed to upload report images"}), 500
 
@@ -131,8 +134,10 @@ def upload_profile_pic():
     """
     Accepts a single profile picture.
     Flutter sends: multipart/form-data with fields:
-      - uid: string
+      - uid:   string  (Supabase user UUID)
       - image: single image file
+    Headers:
+      - Authorization: Bearer <supabase_access_token>
     Returns: { "photoUrl": "..." }
     """
     uid = request.form.get("uid")

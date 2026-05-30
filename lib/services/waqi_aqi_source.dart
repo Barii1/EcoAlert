@@ -51,32 +51,70 @@ class WaqiAqiSource implements AqiDataSource {
 
   @override
   Future<List<HourlyAqiPoint>> fetchHourly(String city, {int hours = 24}) async {
-    // WAQI free tier doesn't provide hourly history directly.
-    // Generate synthetic hourly points based on current AQI with realistic variance.
-    // Cloud Functions will provide real hourly data via Firestore in Phase 6.
     try {
-      final current = await fetchCurrent(city);
-      final now = DateTime.now();
-      final points = <HourlyAqiPoint>[];
-
-      for (int i = hours - 1; i >= 0; i--) {
-        // Simulate diurnal AQI pattern: worse in morning/evening, better midday.
-        final hour = (now.hour - i) % 24;
-        final diurnalFactor = _diurnalFactor(hour);
-        final variance = (current.aqi * 0.15 * diurnalFactor).round();
-        final hourAqi = (current.aqi + variance).clamp(0, 500);
-
-        points.add(HourlyAqiPoint(
-          hour: now.subtract(Duration(hours: i)),
-          aqi: hourAqi,
-        ));
-      }
-
-      return points;
+      return await _fetchHourlyFromOpenMeteo(city, hours);
     } catch (e) {
-      debugPrint('[WaqiAqiSource] fetchHourly fallback: $e');
-      rethrow;
+      debugPrint('[WaqiAqiSource] Open-Meteo hourly failed: $e — using synthetic fallback');
+      try {
+        final current = await fetchCurrent(city);
+        return _syntheticHourly(current, hours);
+      } catch (_) {
+        rethrow;
+      }
     }
+  }
+
+  Future<List<HourlyAqiPoint>> _fetchHourlyFromOpenMeteo(String city, int hours) async {
+    final coords = CityMappings.cityCoords[city] ??
+        CityMappings.cityCoords.entries
+            .firstWhere(
+              (e) => e.key.toLowerCase() == city.toLowerCase(),
+              orElse: () => const MapEntry('Lahore', [31.5204, 74.3587]),
+            )
+            .value;
+
+    final response = await _dio.get(
+      'https://air-quality-api.open-meteo.com/v1/air-quality',
+      queryParameters: {
+        'latitude': coords[0],
+        'longitude': coords[1],
+        'hourly': 'us_aqi',
+        'timezone': 'auto',
+        'past_days': 1,
+        'forecast_days': 0,
+      },
+    );
+
+    final data = response.data as Map<String, dynamic>? ?? {};
+    final hourly = data['hourly'] as Map<String, dynamic>? ?? {};
+    final times = (hourly['time'] as List<dynamic>?)?.cast<String>() ?? [];
+    final aqiValues = (hourly['us_aqi'] as List<dynamic>?) ?? [];
+
+    final cutoff = DateTime.now().subtract(Duration(hours: hours));
+    final points = <HourlyAqiPoint>[];
+
+    for (int i = 0; i < times.length; i++) {
+      final dt = DateTime.tryParse(times[i]);
+      if (dt == null || dt.isBefore(cutoff)) continue;
+      final aqiVal = (aqiValues[i] as num?)?.toInt() ?? 0;
+      points.add(HourlyAqiPoint(hour: dt, aqi: aqiVal));
+    }
+
+    if (points.isEmpty) throw Exception('No hourly AQI data returned from Open-Meteo');
+    return points;
+  }
+
+  List<HourlyAqiPoint> _syntheticHourly(AqiReading current, int hours) {
+    final now = DateTime.now();
+    return List.generate(hours, (i) {
+      final hour = (now.hour - (hours - 1 - i)) % 24;
+      final factor = _diurnalFactor(hour);
+      final variance = (current.aqi * 0.15 * factor).round();
+      return HourlyAqiPoint(
+        hour: now.subtract(Duration(hours: hours - 1 - i)),
+        aqi: (current.aqi + variance).clamp(0, 500),
+      );
+    });
   }
 
   double _extractPollutant(Map<String, dynamic> iaqi, String key) {
@@ -87,8 +125,6 @@ class WaqiAqiSource implements AqiDataSource {
     return 0;
   }
 
-  /// Returns a factor (-1 to 1) simulating diurnal AQI variation.
-  /// Peaks at 7-9 AM and 6-8 PM (rush hours), dips midday.
   double _diurnalFactor(int hour) {
     if (hour >= 7 && hour <= 9) return 0.8;
     if (hour >= 18 && hour <= 20) return 0.6;

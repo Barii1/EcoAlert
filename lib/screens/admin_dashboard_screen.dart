@@ -1,16 +1,29 @@
+import 'dart:math' as math;
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
-import '../config/app_colors.dart';
-import '../config/city_mappings.dart';
+
+import '../config/app_config.dart';
+import '../models/hazard_report_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/report_provider.dart';
-import '../models/hazard_report_model.dart';
-import '../main.dart' show MainNavigationScreen;
 import 'admin_report_management_screen.dart';
-import 'admin_user_management_screen.dart';
-import 'admin_content_management_screen.dart';
 import 'admin_system_settings_screen.dart';
+import 'admin_user_management_screen.dart';
+
+// ── Shared admin palette ──────────────────────────────────────────────────────
+const _kBg     = Color(0xFF000000);
+const _kCard   = Color(0xFF111111);
+const _kBorder = Color(0xFF1F1F1F);
+const _kGreen  = Color(0xFF4ADE80);
+const _kRed    = Color(0xFFEF4444);
+const _kOrange = Color(0xFFF97316);
+const _kText   = Colors.white;
+const _kSub    = Color(0xFF9CA3AF);
+const _kDim    = Color(0xFF4B5563);
+
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -19,1152 +32,198 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  int _currentIndex = 0;
-  final GlobalKey<FormState> _broadcastFormKey = GlobalKey<FormState>();
-  final TextEditingController _broadcastTitleController =
-      TextEditingController();
-  final TextEditingController _broadcastDescriptionController =
-      TextEditingController();
-  String? _selectedBroadcastCity;
-  bool _isSendingBroadcast = false;
+  int _tab = 0;
+  bool _backendOnline = false;
+  bool _checkingBackend = true;
 
   @override
-  void dispose() {
-    _broadcastTitleController.dispose();
-    _broadcastDescriptionController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _checkHealth();
   }
 
-  void _showEmergencyBroadcastDialog(BuildContext context) {
-    _broadcastTitleController.clear();
-    _broadcastDescriptionController.clear();
-    _selectedBroadcastCity = null;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.bgCard,
-              title: const Text(
-                'Emergency Broadcast',
-                style: TextStyle(color: AppColors.textPrimary),
-              ),
-              content: Form(
-                key: _broadcastFormKey,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextFormField(
-                        controller: _broadcastTitleController,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: const InputDecoration(
-                          labelText: 'Title',
-                          hintText: 'Enter emergency alert title',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Title is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _broadcastDescriptionController,
-                        maxLines: 4,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: const InputDecoration(
-                          labelText: 'Description',
-                          hintText: 'Describe the emergency and instructions',
-                        ),
-                        validator: (value) {
-                          final text = value?.trim() ?? '';
-                          if (text.isEmpty) {
-                            return 'Description is required';
-                          }
-                          if (text.length < 20) {
-                            return 'Description must be at least 20 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: _selectedBroadcastCity,
-                        decoration: const InputDecoration(
-                          labelText: 'City',
-                        ),
-                        dropdownColor: AppColors.bgCard,
-                        items: <String>['ALL', ...CityMappings.allCities]
-                            .map(
-                              (city) => DropdownMenuItem<String>(
-                                value: city,
-                                child: Text(
-                                  city,
-                                  style: const TextStyle(
-                                      color: AppColors.textPrimary),
-                                ),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) {
-                          setDialogState(() {
-                            _selectedBroadcastCity = value;
-                          });
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please select a city';
-                          }
-                          final validCities = <String>{
-                            'ALL',
-                            ...CityMappings.allCities,
-                          };
-                          if (!validCities.contains(value)) {
-                            return 'Select a valid city';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: _isSendingBroadcast
-                      ? null
-                      : () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: _isSendingBroadcast
-                      ? null
-                      : () async {
-                          final form = _broadcastFormKey.currentState;
-                          if (form == null || !form.validate()) {
-                            return;
-                          }
-                          final title = _broadcastTitleController.text.trim();
-                          final description =
-                              _broadcastDescriptionController.text.trim();
-                          final city = _selectedBroadcastCity ?? 'ALL';
-
-                          final shouldSend = await _showBroadcastConfirmation(
-                            context,
-                            city,
-                          );
-                          if (!shouldSend) return;
-
-                          if (!context.mounted || !mounted) return;
-                          Navigator.of(context).pop();
-                          await _sendEmergencyBroadcast(
-                            title: title,
-                            description: description,
-                            city: city,
-                          );
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.danger,
-                  ),
-                  child: const Text('Send Alert'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<bool> _showBroadcastConfirmation(
-      BuildContext context, String city) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.bgCard,
-        title: const Text(
-          'Confirm Emergency Broadcast',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: Text(
-          'Send emergency alert to all users in $city? This cannot be undone.',
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.danger,
-              foregroundColor: AppColors.textPrimary,
-            ),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-
-    return confirmed ?? false;
-  }
-
-  Future<void> _sendEmergencyBroadcast(
-    {
-    required String title,
-    required String description,
-    required String city,
-  }) async {
-    if (_isSendingBroadcast) return;
-
-    final messenger = ScaffoldMessenger.of(context);
-
-    setState(() {
-      _isSendingBroadcast = true;
-    });
-
+  Future<void> _checkHealth() async {
+    setState(() => _checkingBackend = true);
     try {
-      await Supabase.instance.client.from('alerts').insert({
-        'type': 'emergency',
-        'title': title,
-        'description': description,
-        'city': city.toLowerCase(),
-        'timestamp': DateTime.now().toIso8601String(),
-        'severity': 'critical',
-        'is_active': true,
-        'location': city,
-        'action_text': 'View Details',
-      });
-
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Emergency broadcast sent'),
-        ),
-      );
+      final res = await http
+          .get(Uri.parse('${AppConfig.uploadApiBaseUrl}/health'))
+          .timeout(const Duration(seconds: 8));
+      if (mounted) setState(() => _backendOnline = res.statusCode == 200);
     } catch (_) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Failed to send broadcast — try again'),
-        ),
-      );
+      if (mounted) setState(() => _backendOnline = false);
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSendingBroadcast = false;
-        });
-      }
+      if (mounted) setState(() => _checkingBackend = false);
     }
   }
+
+  static const _icons = [
+    Icons.grid_view_rounded,
+    Icons.person_outline_rounded,
+    Icons.flag_outlined,
+    Icons.settings_outlined,
+  ];
+  static const _labels = ['Dashboard', 'Users', 'Reports', 'Settings'];
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final reportProvider = context.watch<ReportProvider>();
-
-    if (!authProvider.isAdmin) {
-      return Scaffold(
-        backgroundColor: AppColors.bgSecondary,
-        body: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock, color: AppColors.textSecondary, size: 40),
-                const SizedBox(height: 12),
-                const Text(
-                  'Admin access required',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Please sign in as an administrator to continue.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: 200,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        '/login',
-                        (route) => false,
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.bgSecondary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Go to Login',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final pendingReports = reportProvider.pendingReports;
-
+    final auth = context.watch<AuthProvider>();
     return Scaffold(
-      backgroundColor: AppColors.bgSecondary,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: const BoxDecoration(
-                color: AppColors.bgSecondary,
-                border: Border(
-                  bottom: BorderSide(color: AppColors.borderSubtle, width: 1),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: AppColors.warning.withOpacity(0.3)),
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings_rounded,
-                      color: AppColors.warning,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'ADMIN PANEL',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        Text(
-                          authProvider.currentUser?.username ?? 'Administrator',
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // View as user button
-                  Tooltip(
-                    message: 'View User App',
-                    child: IconButton(
-                      icon: const Icon(Icons.phone_android_rounded,
-                          color: AppColors.primary),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const _UserAppView(),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Logout
-                  Tooltip(
-                    message: 'Log Out',
-                    child: IconButton(
-                      icon: const Icon(Icons.logout_rounded,
-                          color: AppColors.danger),
-                      onPressed: () => _confirmLogout(context, authProvider),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Main Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-
-                    // Pending Approvals Section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        RichText(
-                          text: TextSpan(
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            children: [
-                              const TextSpan(text: 'Pending Approvals '),
-                              TextSpan(
-                                text: '(${pendingReports.length})',
-                                style: const TextStyle(
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const AdminReportManagementScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            'View All',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 240,
-                      child: pendingReports.isEmpty
-                          ? Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: AppColors.bgCard,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: AppColors.textPrimary.withOpacity(0.12)),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'No pending approvals',
-                                  style: TextStyle(color: AppColors.textSecondary),
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: pendingReports.length,
-                              itemBuilder: (context, index) {
-                                final report = pendingReports[index];
-                                return Container(
-                                  width: MediaQuery.of(context).size.width * 0.85,
-                                  margin: EdgeInsets.only(
-                                    right: index < pendingReports.length - 1 ? 16 : 0,
-                                  ),
-                                  child: _buildPendingApprovalCard(context, report),
-                                );
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // System Status Section
-                    const Text(
-                      'System Status',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildSystemStatusCard(
-                      icon: Icons.smart_toy,
-                      title: 'Prediction Engine',
-                      subtitle: 'v2.4 Online',
-                      value: '94%',
-                      label: 'CONFIDENCE',
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildSystemStatusCard(
-                            icon: Icons.air,
-                            title: 'Avg. AQI',
-                            value: '210',
-                            label: 'Hazardous',
-                            color: AppColors.danger,
-                            subtitle: '+12%',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildSystemStatusCard(
-                            icon: Icons.water_drop,
-                            title: 'River Levels',
-                            value: 'Normal',
-                            label: 'Indus Basin',
-                            color: AppColors.primary,
-                            subtitle: 'Stable',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Quick Access Section
-                    const Text(
-                      'Quick Access',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildQuickAccessButton(
-                            icon: Icons.article,
-                            label: 'Content',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AdminContentManagementScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildQuickAccessButton(
-                            icon: Icons.people,
-                            label: 'Users',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AdminUserManagementScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildQuickAccessButton(
-                            icon: Icons.settings,
-                            label: 'Configs',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AdminSystemSettingsScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ── Model Status button ──────────────────────────────
-                    _buildQuickAccessButton(
-                      icon: Icons.psychology_rounded,
-                      label: '🤖  Model Status — Live ML Diagnostics',
-                      onTap: () => Navigator.pushNamed(context, '/model-status'),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Emergency Broadcast Banner
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2e1616),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.danger.withOpacity(0.2),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.danger.withOpacity(0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.warning,
-                              color: AppColors.danger,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Emergency Broadcast',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Send nationwide Red Alert',
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {
-                              _showEmergencyBroadcastDialog(context);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.danger,
-                              foregroundColor: AppColors.textPrimary,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Override',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 100),
-                  ],
-                ),
-              ),
-            ),
-
-            // Bottom Navigation Bar
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.bgSecondary.withOpacity(0.95),
-                border: Border(
-                  top: BorderSide(
-                    color: AppColors.textPrimary.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNavItem(Icons.dashboard, 'Home', 0, () {
-                        setState(() {
-                          _currentIndex = 0;
-                        });
-                      }),
-                      _buildNavItem(Icons.assignment, 'Reports', 1, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AdminReportManagementScreen(),
-                          ),
-                        );
-                      }, hasNotification: true),
-                      _buildNavItem(Icons.settings_outlined, 'Settings', 2, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AdminSystemSettingsScreen(),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(
-    IconData icon,
-    String label,
-    int index,
-    VoidCallback onTap, {
-    bool hasNotification = false,
-  }) {
-    final isSelected = _currentIndex == index;
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    icon,
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
-                    size: 24,
-                  ),
-                  if (hasNotification && !isSelected)
-                    Positioned(
-                      right: -6,
-                      top: -4,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.danger,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.textSecondary,
-                  fontSize: 10,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPendingApprovalCard(
-    BuildContext context,
-    HazardReportModel report,
-  ) {
-    final reportProvider = Provider.of<ReportProvider>(context, listen: false);
-    final timeAgo = _formatTimeAgo(report.createdAt);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.textPrimary.withOpacity(0.12)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: _kBg,
+      body: IndexedStack(
+        index: _tab,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _getHazardColor(report.hazardType).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _getHazardIcon(report.hazardType),
-                  color: _getHazardColor(report.hazardType),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      report.hazardType,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${report.locationLabel} • $timeAgo',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                ),
-                child: const Text(
-                  'PENDING',
-                  style: TextStyle(
-                    color: Colors.orange,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-            ],
+          _DashboardTab(
+            backendOnline: _backendOnline,
+            checkingBackend: _checkingBackend,
+            onRefreshHealth: _checkHealth,
+            onViewAllReports: () => setState(() => _tab = 2),
           ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.textPrimary.withOpacity(0.1)),
-              ),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    report.details,
-                    style: TextStyle(
-                      color: AppColors.textPrimary.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    reportProvider.reject(report.id);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.danger,
-                    side: BorderSide(color: AppColors.danger),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.close, size: 18),
-                      SizedBox(width: 4),
-                      Text('Reject'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    reportProvider.approve(report.id);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.textPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check, size: 18),
-                      SizedBox(width: 4),
-                      Text('Approve'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+          const AdminUsersTab(),
+          const AdminReportsTab(),
+          AdminSettingsTab(auth: auth),
         ],
       ),
+      bottomNavigationBar: _AdminNav(
+        current: _tab,
+        icons: _icons,
+        labels: _labels,
+        onTap: (i) => setState(() => _tab = i),
+      ),
     );
   }
+}
 
-  Widget _buildSystemStatusCard({
-    required IconData icon,
-    required String title,
-    required String value,
-    required String label,
-    required Color color,
-    String? subtitle,
-  }) {
+// ── Bottom navigation ─────────────────────────────────────────────────────────
+
+class _AdminNav extends StatelessWidget {
+  const _AdminNav({
+    required this.current,
+    required this.icons,
+    required this.labels,
+    required this.onTap,
+  });
+  final int current;
+  final List<IconData> icons;
+  final List<String> labels;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.textPrimary.withOpacity(0.12)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 24),
+      color: _kBg,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 60,
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: _kBorder, width: 0.5)),
           ),
-          const SizedBox(width: 12),
+          child: Row(
+            children: List.generate(icons.length, (i) {
+              final selected = i == current;
+              return Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onTap(i),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icons[i],
+                          size: 22,
+                          color: selected ? _kGreen : Colors.white54),
+                      const SizedBox(height: 4),
+                      Text(
+                        labels[i],
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                          color: selected ? _kGreen : Colors.white54,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 2,
+                        width: selected ? 28 : 0,
+                        decoration: BoxDecoration(
+                          color: _kGreen,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Dashboard Tab ─────────────────────────────────────────────────────────────
+
+class _DashboardTab extends StatelessWidget {
+  const _DashboardTab({
+    required this.backendOnline,
+    required this.checkingBackend,
+    required this.onRefreshHealth,
+    required this.onViewAllReports,
+  });
+  final bool backendOnline;
+  final bool checkingBackend;
+  final VoidCallback onRefreshHealth;
+  final VoidCallback onViewAllReports;
+
+  @override
+  Widget build(BuildContext context) {
+    final reports = context.watch<ReportProvider>();
+    final pending = reports.pendingReports.take(3).toList();
+
+    return SafeArea(
+      child: Column(
+        children: [
+          _AdminHeader(
+            backendOnline: backendOnline,
+            checkingBackend: checkingBackend,
+          ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
+                _ApiLoadCard(backendOnline: backendOnline, onRefresh: onRefreshHealth),
+                const SizedBox(height: 28),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (subtitle != null)
-                      Text(
-                        subtitle,
+                    const Text('Pending Reports',
                         style: TextStyle(
-                          color: subtitle.toLowerCase() == 'stable'
-                              ? AppColors.primary
-                              : AppColors.danger,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                            color: _kText,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    GestureDetector(
+                      onTap: onViewAllReports,
+                      child: const Text('View All',
+                          style: TextStyle(color: _kSub, fontSize: 14)),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                const SizedBox(height: 16),
+                if (reports.isLoading)
+                  const Center(
+                      child: CircularProgressIndicator(color: _kGreen))
+                else if (pending.isEmpty)
+                  _EmptyState(
+                    icon: Icons.check_circle_outline_rounded,
+                    message: 'No pending reports',
+                  )
+                else
+                  ...pending.map((r) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _PendingReportCard(report: r),
+                      )),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickAccessButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.bgCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.textPrimary.withOpacity(0.12)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                icon,
-                color: AppColors.primary,
-                size: 28,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _getHazardIcon(String hazardType) {
-    final type = hazardType.toLowerCase();
-    if (type.contains('flood')) {
-      return Icons.water_drop;
-    } else if (type.contains('smog') || type.contains('aqi')) {
-      return Icons.air;
-    } else if (type.contains('cloud')) {
-      return Icons.cloud;
-    }
-    return Icons.warning;
-  }
-
-  Color _getHazardColor(String hazardType) {
-    final type = hazardType.toLowerCase();
-    if (type.contains('flood')) {
-      return AppColors.primary;
-    } else if (type.contains('smog') || type.contains('aqi')) {
-      return Colors.orange;
-    } else if (type.contains('cloud')) {
-      return Colors.blue;
-    }
-    return AppColors.danger;
-  }
-
-  String _formatTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
-  }
-
-  void _confirmLogout(BuildContext context, AuthProvider auth) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.bgCard,
-        title: const Text(
-          'Log Out',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: const Text(
-          'Sign out of the admin panel?',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              final nav = Navigator.of(context);
-              Navigator.pop(context);
-              await auth.logout();
-              nav.pushNamedAndRemoveUntil('/login', (route) => false);
-            },
-            child: const Text(
-              'Log Out',
-              style: TextStyle(color: AppColors.danger),
             ),
           ),
         ],
@@ -1173,28 +232,357 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 }
 
-class _UserAppView extends StatelessWidget {
-  const _UserAppView();
+// ── Shared admin header ───────────────────────────────────────────────────────
+
+class _AdminHeader extends StatelessWidget {
+  const _AdminHeader({
+    this.backendOnline,
+    this.checkingBackend,
+  });
+  final bool? backendOnline;
+  final bool? checkingBackend;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgSecondary,
-      appBar: AppBar(
-        backgroundColor: AppColors.bgSecondary,
-        foregroundColor: AppColors.textPrimary,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Back to Admin',
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'User App Preview',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
-        ),
-        centerTitle: true,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: _kBorder, width: 0.5)),
       ),
-      body: const MainNavigationScreen(),
+      child: Row(
+        children: [
+          const Text(
+            'EcoAlert Admin',
+            style: TextStyle(
+                color: _kText, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => Navigator.pushReplacementNamed(context, '/navigation'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: _kCard,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _kBorder),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.phone_android_rounded, color: _kSub, size: 13),
+                  SizedBox(width: 5),
+                  Text('User App',
+                      style: TextStyle(color: _kSub, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+          if (backendOnline != null)
+            _StatusPill(
+              online: backendOnline!,
+              checking: checkingBackend ?? false,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.online, required this.checking});
+  final bool online;
+  final bool checking;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = checking ? _kSub : (online ? _kGreen : _kRed);
+    final label = checking ? 'Checking…' : (online ? 'System Online' : 'System Offline');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+              width: 6, height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── API load chart card ───────────────────────────────────────────────────────
+
+class _ApiLoadCard extends StatefulWidget {
+  const _ApiLoadCard({required this.backendOnline, required this.onRefresh});
+  final bool backendOnline;
+  final VoidCallback onRefresh;
+
+  @override
+  State<_ApiLoadCard> createState() => _ApiLoadCardState();
+}
+
+class _ApiLoadCardState extends State<_ApiLoadCard> {
+  late final List<FlSpot> _spots;
+
+  @override
+  void initState() {
+    super.initState();
+    _spots = _generateSpots();
+  }
+
+  List<FlSpot> _generateSpots() {
+    final rng = math.Random(7);
+    return List.generate(20, (i) {
+      final base = 5000 + 8000 * math.sin(i * math.pi / 14);
+      final noise = (rng.nextDouble() - 0.5) * 3000;
+      return FlSpot(i.toDouble(), (base + noise).clamp(1000, 16000));
+    });
+  }
+
+  String _formatLoad(double v) {
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}k';
+    return v.toStringAsFixed(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentVal = _spots.last.y;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('System API Load',
+                        style: TextStyle(
+                            color: _kText,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    const Text('Requests / min',
+                        style: TextStyle(color: _kSub, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Text(
+                _formatLoad(currentVal),
+                style: const TextStyle(
+                    color: _kText, fontSize: 36, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 100,
+            child: LineChart(
+              LineChartData(
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 5000,
+                  getDrawingHorizontalLine: (_) => FlLine(
+                    color: Colors.white.withOpacity(0.05),
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                minY: 0,
+                maxY: 18000,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: _spots,
+                    isCurved: true,
+                    curveSmoothness: 0.35,
+                    color: Colors.white,
+                    barWidth: 2,
+                    dotData: FlDotData(
+                      show: true,
+                      checkToShowDot: (spot, _) => spot.x == _spots.last.x,
+                      getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                        radius: 5,
+                        color: _kGreen,
+                        strokeWidth: 0,
+                      ),
+                    ),
+                    belowBarData: BarAreaData(show: false),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Pending report card ───────────────────────────────────────────────────────
+
+class _PendingReportCard extends StatelessWidget {
+  const _PendingReportCard({required this.report});
+  final HazardReportModel report;
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  bool get _isCritical {
+    final t = report.hazardType.toLowerCase();
+    return t.contains('flood') || t.contains('air') ||
+        report.aqi > 150 || t.contains('fire') || t.contains('seismic');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rp = context.read<ReportProvider>();
+    final critical = _isCritical;
+    final severityColor = critical ? _kOrange : _kGreen;
+    final severityIcon = critical ? Icons.warning_amber_rounded : Icons.info_outline_rounded;
+    final severityLabel = critical ? 'Critical' : 'Notice';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(severityIcon, color: severityColor, size: 14),
+              const SizedBox(width: 5),
+              Text(severityLabel,
+                  style: TextStyle(
+                      color: severityColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text(_timeAgo(report.createdAt),
+                  style: const TextStyle(color: _kSub, fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            report.hazardType,
+            style: const TextStyle(
+                color: _kText, fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${report.locationLabel} — ${report.details}',
+            style: const TextStyle(color: _kSub, fontSize: 13, height: 1.4),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: 'Approve',
+                  filled: true,
+                  onTap: () => rp.approve(report.id),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _ActionBtn(
+                  label: 'Reject',
+                  filled: false,
+                  onTap: () => rp.reject(report.id),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  const _ActionBtn({
+    required this.label,
+    required this.filled,
+    required this.onTap,
+  });
+  final String label;
+  final bool filled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          color: filled ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: filled ? null : Border.all(color: _kBorder),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: filled ? Colors.black : _kText,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shared empty state ────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.icon, required this.message});
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(
+        children: [
+          Icon(icon, color: _kDim, size: 40),
+          const SizedBox(height: 10),
+          Text(message, style: const TextStyle(color: _kSub, fontSize: 14)),
+        ],
+      ),
     );
   }
 }
