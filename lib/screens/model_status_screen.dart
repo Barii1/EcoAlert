@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
+import '../providers/auth_provider.dart';
 import '../config/app_config.dart';
 import '../config/app_text_styles.dart';
 import '../providers/aqi_provider.dart';
@@ -54,7 +55,18 @@ class _ModelStatusScreenState extends State<ModelStatusScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _fetchStatus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.read<AuthProvider>().isAdmin) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Admin access required'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+        return;
+      }
+      _fetchStatus();
+    });
   }
 
   @override

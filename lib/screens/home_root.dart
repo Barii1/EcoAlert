@@ -673,17 +673,6 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             width: 170,
             child: _QuickActionCard(
-              icon: Icons.image_search_rounded,
-              label: 'AQI Image Scan',
-              sublabel: 'ML air quality scan',
-              color: AppColors.info,
-              onTap: () => Navigator.pushNamed(context, '/aqi-image-classify'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 170,
-            child: _QuickActionCard(
               icon: Icons.map_rounded,
               label: 'Hazard Map',
               sublabel: 'View live map',
