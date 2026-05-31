@@ -264,6 +264,11 @@ class AuthProvider extends ChangeNotifier {
           _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
       _hasShownVerifyWarning = false;
       _errorMessage = null;
+      // NOTE: fetch user role from users/profiles table here and save to
+      // SharedPreferences as current_user_role so screens can gate features
+      // without re-fetching every time.  The role is already in _profile
+      // (key: 'role'); persist it like:
+      //   prefs.setString('current_user_role', _profile?['role'] ?? 'registered_user');
       onAuthLoginSuccess?.call();
     } on AuthException catch (e) {
       _isAuthenticated = false;

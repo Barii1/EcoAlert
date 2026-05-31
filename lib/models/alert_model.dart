@@ -31,9 +31,9 @@ class AlertModel {
     return AlertModel(
       id: readString(['id']),
       title: readString(['title']),
-      description: readString(['description']),
+      description: readString(['description', 'body']),
       severity: readString(['severity']),
-      location: readString(['location']),
+      location: readString(['location', 'city']),
       timestamp: _timestampFromJson(json['timestamp'] ?? json['created_at']),
       type: readString(['type']),
       actionText: readString(['actionText', 'action_text']),

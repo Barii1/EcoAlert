@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/location_provider.dart';
 import '../widgets/app_background.dart';
 import '../widgets/surface_card.dart';
+import 'payment_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tier definitions
@@ -437,16 +438,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           if (isRegistered) ...[
             const SizedBox(width: 10),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.info.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.info.withOpacity(0.3)),
+            GestureDetector(
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const PaymentScreen())),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.info.withOpacity(0.3)),
+                ),
+                child: Text('Upgrade',
+                    style: AppTextStyles.label.copyWith(color: AppColors.info)),
               ),
-              child: Text('Upgrade',
-                  style: AppTextStyles.label.copyWith(color: AppColors.info)),
             ),
           ],
         ],

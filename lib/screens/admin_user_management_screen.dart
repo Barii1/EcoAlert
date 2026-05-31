@@ -1,3 +1,9 @@
+// Hassaan/Bilal: run this SQL in Supabase:
+// ALTER TABLE profiles ADD COLUMN IF NOT EXISTS role text DEFAULT 'registered_user';
+// Possible role values: 'admin', 'premium_user', 'registered_user', 'guest'
+// (The app also understands legacy values: 'premium' → premium_user,
+//  'registered' → registered_user, 'general' → guest)
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -11,6 +17,52 @@ const _kText   = Colors.white;
 const _kSub    = Color(0xFF9CA3AF);
 const _kDim    = Color(0xFF4B5563);
 
+// ── Role definitions ──────────────────────────────────────────────────────────
+
+class _RoleOption {
+  const _RoleOption(this.value, this.label, this.color);
+  final String value;
+  final String label;
+  final Color  color;
+}
+
+const _kRoles = [
+  _RoleOption('admin',           'Admin',          _kRed),
+  _RoleOption('premium_user',    'Premium User',   Color(0xFFFBBF24)),
+  _RoleOption('registered_user', 'Registered User',Color(0xFF3B82F6)),
+  _RoleOption('guest',           'Guest',          _kDim),
+];
+
+/// Maps legacy / variant Supabase role strings to the canonical spec values.
+String _canonicalRole(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'admin':                        return 'admin';
+    case 'premium': case 'premium_user': return 'premium_user';
+    case 'registered': case 'registered_user': return 'registered_user';
+    case 'guest': case 'general':        return 'guest';
+    default:                             return 'registered_user';
+  }
+}
+
+String _roleLabel(String canonical) =>
+    _kRoles.firstWhere((r) => r.value == canonical,
+        orElse: () => _kRoles[2]).label;
+
+Color _roleColor(String canonical) =>
+    _kRoles.firstWhere((r) => r.value == canonical,
+        orElse: () => _kRoles[2]).color;
+
+// ── Date formatter ────────────────────────────────────────────────────────────
+
+String _fmtDate(DateTime? dt) {
+  if (dt == null) return '—';
+  const m = ['Jan','Feb','Mar','Apr','May','Jun',
+              'Jul','Aug','Sep','Oct','Nov','Dec'];
+  return '${dt.day} ${m[dt.month - 1]} ${dt.year}';
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 class AdminUsersTab extends StatefulWidget {
   const AdminUsersTab({super.key});
 
@@ -20,29 +72,39 @@ class AdminUsersTab extends StatefulWidget {
 
 class _AdminUsersTabState extends State<AdminUsersTab> {
   final _searchCtrl = TextEditingController();
-  String _search = '';
-  bool _loading = true;
+  String  _search     = '';
+  String? _roleFilter;          // null = All
+  bool    _loading    = true;
   String? _error;
   List<_UserRow> _users = [];
+  RealtimeChannel? _channel;
+
+  String? get _currentUid => Supabase.instance.client.auth.currentUser?.id;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
     _loadUsers();
+    _startRealtime();
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _channel?.unsubscribe();
     super.dispose();
   }
+
+  // ── Supabase ───────────────────────────────────────────────────────────────
 
   Future<void> _loadUsers() async {
     setState(() { _loading = true; _error = null; });
     try {
       final rows = await Supabase.instance.client
           .from('profiles')
-          .select()
+          .select('id, username, email, role, is_suspended, city, created_at')
           .order('created_at', ascending: false);
       if (!mounted) return;
       setState(() {
@@ -57,6 +119,18 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     }
   }
 
+  void _startRealtime() {
+    _channel = Supabase.instance.client
+        .channel('admin_users_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'profiles',
+          callback: (_) => _loadUsers(),
+        )
+        .subscribe();
+  }
+
   Future<void> _setSuspended(_UserRow user, bool suspended) async {
     final idx = _users.indexWhere((u) => u.id == user.id);
     if (idx < 0) return;
@@ -65,7 +139,9 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       await Supabase.instance.client
           .from('profiles')
           .update({'is_suspended': suspended}).eq('id', user.id);
-      _snack(suspended ? '${user.displayName} suspended' : '${user.displayName} reactivated');
+      _snack(suspended
+          ? '${user.displayName} suspended'
+          : '${user.displayName} reactivated');
     } catch (e) {
       setState(() => _users[idx] = user);
       _snack('Action failed: $e');
@@ -80,29 +156,79 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       await Supabase.instance.client
           .from('profiles')
           .update({'role': newRole}).eq('id', user.id);
-      _snack('Role updated to $newRole');
+      _snack('Role updated to ${_roleLabel(newRole)}');
     } catch (e) {
       setState(() => _users[idx] = user);
       _snack('Update failed: $e');
     }
   }
 
-  void _snack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg), backgroundColor: _kCard));
+  Future<void> _confirmRoleChange(_UserRow user, String newRole) async {
+    final oldLabel = _roleLabel(_canonicalRole(user.role));
+    final newLabel = _roleLabel(newRole);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _kCard,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text('Change Role?',
+            style: TextStyle(color: _kText, fontSize: 16,
+                fontWeight: FontWeight.w700)),
+        content: Text(
+          'Change ${user.email}\nfrom $oldLabel → $newLabel?',
+          style: const TextStyle(color: _kSub, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: _kSub)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm',
+                style: TextStyle(
+                    color: _kGreen, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _setRole(user, newRole);
+    }
   }
 
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: _kCard));
+  }
+
+  // ── Filtering ──────────────────────────────────────────────────────────────
+
   List<_UserRow> get _filtered {
+    var list = _users;
+
+    // Role chip filter
+    if (_roleFilter != null) {
+      list = list.where((u) => _canonicalRole(u.role) == _roleFilter).toList();
+    }
+
+    // Search filter (email, username, ID)
     final q = _search.trim().toLowerCase();
-    if (q.isEmpty) return _users;
-    return _users.where((u) =>
-        u.username.toLowerCase().contains(q) ||
+    if (q.isEmpty) return list;
+    return list.where((u) =>
         u.email.toLowerCase().contains(q) ||
+        u.username.toLowerCase().contains(q) ||
         u.id.toLowerCase().contains(q)).toList();
   }
 
   int get _activeCount => _users.where((u) => !u.isSuspended).length;
+
+  // ── Bottom-sheet actions (suspend / unsuspend) ─────────────────────────────
 
   void _showActions(_UserRow user) {
     showModalBottomSheet(
@@ -115,37 +241,33 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
-            Container(width: 36, height: 4,
-                decoration: BoxDecoration(
-                    color: _kBorder,
-                    borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                  color: _kBorder,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
             const SizedBox(height: 16),
-            if (!user.isSuspended && user.role != 'admin') ...[
+            if (!user.isSuspended && user.role != 'admin')
               _SheetTile(
-                icon: Icons.block_rounded, label: 'Suspend User', color: _kRed,
-                onTap: () { Navigator.pop(context); _setSuspended(user, true); },
-              ),
+                icon: Icons.block_rounded,
+                label: 'Suspend User',
+                color: _kRed,
+                onTap: () {
+                  Navigator.pop(context);
+                  _setSuspended(user, true);
+                },
+              )
+            else if (user.isSuspended)
               _SheetTile(
-                icon: Icons.workspace_premium_rounded,
-                label: user.role == 'premium' ? 'Remove Premium' : 'Grant Premium',
+                icon: Icons.check_circle_outline_rounded,
+                label: 'Reactivate Account',
                 color: _kGreen,
                 onTap: () {
                   Navigator.pop(context);
-                  _setRole(user, user.role == 'premium' ? 'registered' : 'premium');
+                  _setSuspended(user, false);
                 },
               ),
-              _SheetTile(
-                icon: Icons.admin_panel_settings_outlined,
-                label: 'Make Admin', color: _kSub,
-                onTap: () { Navigator.pop(context); _setRole(user, 'admin'); },
-              ),
-            ] else if (user.isSuspended) ...[
-              _SheetTile(
-                icon: Icons.check_circle_outline_rounded,
-                label: 'Reactivate Account', color: _kGreen,
-                onTap: () { Navigator.pop(context); _setSuspended(user, false); },
-              ),
-            ],
             const SizedBox(height: 8),
           ],
         ),
@@ -153,35 +275,117 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     );
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Column(
         children: [
-          _SimpleHeader(title: 'EcoAlert Admin', statusText: 'System Online'),
+          _SimpleHeader(
+              title: 'User Management',
+              statusText: '$_activeCount active'),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: _kGreen))
+                ? const Center(
+                    child: CircularProgressIndicator(color: _kGreen))
                 : _error != null
                     ? _RetryView(message: _error!, onRetry: _loadUsers)
                     : ListView(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         children: [
+                          // ── Search bar ─────────────────────────────────────
                           _SearchBar(
                             controller: _searchCtrl,
-                            hint: 'Search users by name, role, or ID…',
-                            onChanged: (v) => setState(() => _search = v),
+                            hint: 'Search by email, name or ID…',
+                            onChanged: (v) =>
+                                setState(() => _search = v),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // ── Role filter chips ──────────────────────────────
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _FilterChip(
+                                  label: 'All',
+                                  color: _kGreen,
+                                  selected: _roleFilter == null,
+                                  onTap: () => setState(
+                                      () => _roleFilter = null),
+                                ),
+                                const SizedBox(width: 8),
+                                ..._kRoles.map((r) => Padding(
+                                      padding:
+                                          const EdgeInsets.only(right: 8),
+                                      child: _FilterChip(
+                                        label: r.label,
+                                        color: r.color,
+                                        selected: _roleFilter == r.value,
+                                        onTap: () => setState(
+                                            () => _roleFilter = r.value),
+                                      ),
+                                    )),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 16),
+
+                          // ── User directory ─────────────────────────────────
                           _UserDirectoryCard(
                             users: _filtered,
                             activeCount: _activeCount,
+                            currentUid: _currentUid ?? '',
                             onActionTap: _showActions,
+                            onRoleChange: _confirmRoleChange,
                           ),
                         ],
                       ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Filter chip ───────────────────────────────────────────────────────────────
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color.withOpacity(0.15) : _kCard,
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(
+            color: selected ? color.withOpacity(0.5) : _kBorder,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? color : _kSub,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
@@ -193,11 +397,15 @@ class _UserDirectoryCard extends StatelessWidget {
   const _UserDirectoryCard({
     required this.users,
     required this.activeCount,
+    required this.currentUid,
     required this.onActionTap,
+    required this.onRoleChange,
   });
   final List<_UserRow> users;
   final int activeCount;
+  final String currentUid;
   final ValueChanged<_UserRow> onActionTap;
+  final void Function(_UserRow, String) onRoleChange;
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +418,8 @@ class _UserDirectoryCard extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
                 const Text('User Directory',
@@ -219,7 +428,7 @@ class _UserDirectoryCard extends StatelessWidget {
                         fontSize: 15,
                         fontWeight: FontWeight.w600)),
                 const Spacer(),
-                Text('Total: $activeCount Active',
+                Text('${users.length} shown',
                     style: const TextStyle(color: _kSub, fontSize: 13)),
               ],
             ),
@@ -228,74 +437,23 @@ class _UserDirectoryCard extends StatelessWidget {
           if (users.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
-              child: Text('No users found', style: TextStyle(color: _kSub)),
+              child: Text('No users found',
+                  style: TextStyle(color: _kSub)),
             )
           else
-            ...List.generate(users.length, (i) => Column(
-              children: [
-                _UserTile(user: users[i], onActionTap: onActionTap),
-                if (i < users.length - 1)
-                  const Divider(height: 1, indent: 68, color: _kBorder),
-              ],
-            )),
-        ],
-      ),
-    );
-  }
-}
-
-class _UserTile extends StatelessWidget {
-  const _UserTile({required this.user, required this.onActionTap});
-  final _UserRow user;
-  final ValueChanged<_UserRow> onActionTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final showMenu = user.role == 'admin' || user.isSuspended || user.role != 'registered';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          _Avatar(initials: user.initials, suspended: user.isSuspended),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  user.displayName,
-                  style: TextStyle(
-                    color: user.isSuspended ? _kSub : _kText,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+            ...List.generate(
+              users.length,
+              (i) => Column(
+                children: [
+                  _UserTile(
+                    user: users[i],
+                    isOwnRow: users[i].id == currentUid,
+                    onActionTap: onActionTap,
+                    onRoleChange: onRoleChange,
                   ),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        user.isSuspended ? 'Suspended Account' : user.email,
-                        style: const TextStyle(color: _kSub, fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Text(' · ', style: TextStyle(color: _kDim)),
-                    _RoleBadge(role: user.role, suspended: user.isSuspended),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text('ID: ${user.shortId}',
-                    style: const TextStyle(color: _kDim, fontSize: 11)),
-              ],
-            ),
-          ),
-          if (showMenu)
-            GestureDetector(
-              onTap: () => onActionTap(user),
-              child: const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.more_vert_rounded, color: _kSub, size: 18),
+                  if (i < users.length - 1)
+                    const Divider(height: 1, indent: 68, color: _kBorder),
+                ],
               ),
             ),
         ],
@@ -303,6 +461,144 @@ class _UserTile extends StatelessWidget {
     );
   }
 }
+
+// ── User tile ─────────────────────────────────────────────────────────────────
+
+class _UserTile extends StatelessWidget {
+  const _UserTile({
+    required this.user,
+    required this.isOwnRow,
+    required this.onActionTap,
+    required this.onRoleChange,
+  });
+  final _UserRow user;
+  final bool isOwnRow;
+  final ValueChanged<_UserRow> onActionTap;
+  final void Function(_UserRow, String) onRoleChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final canonical = _canonicalRole(user.role);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Avatar
+          _Avatar(initials: user.initials, suspended: user.isSuspended),
+          const SizedBox(width: 12),
+
+          // Info column
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Email
+                Text(
+                  user.email.isNotEmpty ? user.email : user.displayName,
+                  style: TextStyle(
+                    color: user.isSuspended ? _kSub : _kText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                // Created date + role badge
+                Row(
+                  children: [
+                    Text(
+                      'Joined ${_fmtDate(user.createdAt)}',
+                      style: const TextStyle(
+                          color: _kDim, fontSize: 11),
+                    ),
+                    const SizedBox(width: 8),
+                    _RoleBadge(
+                        canonical: canonical,
+                        suspended: user.isSuspended),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Role DropdownButton
+          Tooltip(
+            message: isOwnRow ? 'Cannot change your own role' : '',
+            child: Opacity(
+              opacity: isOwnRow ? 0.35 : 1.0,
+              child: IgnorePointer(
+                ignoring: isOwnRow,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _kBorder),
+                  ),
+                  child: DropdownButton<String>(
+                    value: canonical,
+                    dropdownColor: _kCard,
+                    underline: const SizedBox.shrink(),
+                    isDense: true,
+                    icon: const Icon(Icons.expand_more_rounded,
+                        color: _kSub, size: 14),
+                    style: const TextStyle(
+                        color: _kText, fontSize: 11),
+                    items: _kRoles.map((r) => DropdownMenuItem(
+                          value: r.value,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6, height: 6,
+                                decoration: BoxDecoration(
+                                    color: r.color,
+                                    shape: BoxShape.circle),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(r.label,
+                                  style: TextStyle(
+                                      color: r.color,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        )).toList(),
+                    onChanged: (newRole) {
+                      if (newRole != null && newRole != canonical) {
+                        onRoleChange(user, newRole);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 4),
+
+          // Three-dots menu (suspend / reactivate)
+          if (!isOwnRow)
+            GestureDetector(
+              onTap: () => onActionTap(user),
+              child: const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Icon(Icons.more_vert_rounded,
+                    color: _kSub, size: 18),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Shared small widgets ──────────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
   const _Avatar({required this.initials, required this.suspended});
@@ -329,78 +625,48 @@ class _Avatar extends StatelessWidget {
 }
 
 class _RoleBadge extends StatelessWidget {
-  const _RoleBadge({required this.role, required this.suspended});
-  final String role;
+  const _RoleBadge({required this.canonical, required this.suspended});
+  final String canonical;
   final bool suspended;
 
   @override
   Widget build(BuildContext context) {
     if (suspended) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: _kOrange.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _kOrange.withOpacity(0.4)),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 5, height: 5,
-              decoration: const BoxDecoration(color: _kOrange, shape: BoxShape.circle)),
+      return _badge(_kOrange, 'Suspended');
+    }
+    final color = _roleColor(canonical);
+    final label = _roleLabel(canonical);
+    return _badge(color, label);
+  }
+
+  Widget _badge(Color color, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+              width: 5, height: 5,
+              decoration: BoxDecoration(
+                  color: color, shape: BoxShape.circle)),
           const SizedBox(width: 4),
-          const Text('Suspended',
-              style: TextStyle(color: _kOrange, fontSize: 11, fontWeight: FontWeight.w600)),
-        ]),
-      );
-    }
-    switch (role) {
-      case 'premium':
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: _kGreen.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _kGreen.withOpacity(0.4)),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 5, height: 5,
-                decoration: const BoxDecoration(color: _kGreen, shape: BoxShape.circle)),
-            const SizedBox(width: 4),
-            const Text('Premium',
-                style: TextStyle(color: _kGreen, fontSize: 11, fontWeight: FontWeight.w600)),
-          ]),
-        );
-      case 'admin':
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _kBorder),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 5, height: 5,
-                decoration: const BoxDecoration(color: _kText, shape: BoxShape.circle)),
-            const SizedBox(width: 4),
-            const Text('Admin',
-                style: TextStyle(color: _kText, fontSize: 11, fontWeight: FontWeight.w600)),
-          ]),
-        );
-      default:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _kBorder),
-          ),
-          child: const Text('Registered',
-              style: TextStyle(color: _kSub, fontSize: 11)),
-        );
-    }
+          Text(label,
+              style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
   }
 }
 
-// ── Shared widgets ────────────────────────────────────────────────────────────
+// ── Shared reusable widgets ───────────────────────────────────────────────────
 
 class _SimpleHeader extends StatelessWidget {
   const _SimpleHeader({required this.title, this.statusText});
@@ -412,13 +678,16 @@ class _SimpleHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _kBorder, width: 0.5)),
+        border: Border(
+            bottom: BorderSide(color: _kBorder, width: 0.5)),
       ),
       child: Row(
         children: [
           Text(title,
               style: const TextStyle(
-                  color: _kText, fontSize: 18, fontWeight: FontWeight.bold)),
+                  color: _kText,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold)),
           const Spacer(),
           if (statusText != null)
             Text(statusText!,
@@ -454,9 +723,11 @@ class _SearchBar extends StatelessWidget {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: const TextStyle(color: _kDim, fontSize: 14),
-          prefixIcon: const Icon(Icons.search_rounded, color: _kDim, size: 18),
+          prefixIcon: const Icon(Icons.search_rounded,
+              color: _kDim, size: 18),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
     );
@@ -480,7 +751,10 @@ class _SheetTile extends StatelessWidget {
     return ListTile(
       leading: Icon(icon, color: color, size: 20),
       title: Text(label,
-          style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w500)),
+          style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w500)),
       onTap: onTap,
     );
   }
@@ -505,7 +779,8 @@ class _RetryView extends StatelessWidget {
           const SizedBox(height: 16),
           TextButton(
             onPressed: onRetry,
-            child: const Text('Try Again', style: TextStyle(color: _kGreen)),
+            child: const Text('Try Again',
+                style: TextStyle(color: _kGreen)),
           ),
         ],
       ),
@@ -523,6 +798,7 @@ class _UserRow {
     required this.role,
     required this.isSuspended,
     this.city,
+    this.createdAt,
   });
 
   final String id;
@@ -531,29 +807,44 @@ class _UserRow {
   final String role;
   final bool isSuspended;
   final String? city;
+  final DateTime? createdAt;
 
-  factory _UserRow.fromMap(Map<String, dynamic> m) => _UserRow(
-        id: m['id']?.toString() ?? '',
-        username: m['username']?.toString() ?? '',
-        email: m['email']?.toString() ?? '',
-        role: m['role']?.toString() ?? 'registered',
-        isSuspended: m['is_suspended'] as bool? ?? false,
-        city: m['city']?.toString(),
-      );
+  factory _UserRow.fromMap(Map<String, dynamic> m) {
+    DateTime? createdAt;
+    final raw = m['created_at'];
+    if (raw is String) createdAt = DateTime.tryParse(raw)?.toLocal();
+
+    return _UserRow(
+      id:          m['id']?.toString() ?? '',
+      username:    m['username']?.toString() ?? '',
+      email:       m['email']?.toString() ?? '',
+      role:        m['role']?.toString() ?? 'registered_user',
+      isSuspended: m['is_suspended'] as bool? ?? false,
+      city:        m['city']?.toString(),
+      createdAt:   createdAt,
+    );
+  }
 
   _UserRow copyWith({String? role, bool? isSuspended}) => _UserRow(
-        id: id, username: username, email: email, city: city,
-        role: role ?? this.role,
+        id: id, username: username, email: email,
+        city: city, createdAt: createdAt,
+        role:        role        ?? this.role,
         isSuspended: isSuspended ?? this.isSuspended,
       );
 
-  String get displayName => username.isNotEmpty ? username : email.split('@').first;
+  String get displayName =>
+      username.isNotEmpty ? username : email.split('@').first;
+
   String get initials {
     final parts = displayName.trim().split(' ');
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
-    return displayName.substring(0, displayName.length >= 2 ? 2 : 1).toUpperCase();
+    return displayName
+        .substring(0, displayName.length >= 2 ? 2 : 1)
+        .toUpperCase();
   }
-  String get shortId => id.length > 5 ? id.substring(0, 5).toUpperCase() : id.toUpperCase();
+
+  String get shortId =>
+      id.length > 5 ? id.substring(0, 5).toUpperCase() : id.toUpperCase();
 }

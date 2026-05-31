@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -137,6 +138,7 @@ class _ReportHazardScreenState extends State<ReportHazardScreen> {
   }
 
   Future<void> _submitReport() async {
+    HapticFeedback.lightImpact();
     if (_selectedHazard == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
 import '../models/hazard_report_model.dart';
@@ -40,6 +41,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _checkHealth();
+    // Hassaan: please also gate the admin route in main.dart as a second
+    // layer of protection (e.g. check role before pushing '/admin').
+    WidgetsBinding.instance.addPostFrameCallback((_) => _verifyAdminAccess());
+  }
+
+  Future<void> _verifyAdminAccess() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) { _redirectUnauthorized(); return; }
+
+    bool isAdmin = context.read<AuthProvider>().isAdmin;
+
+    // Re-verify against Supabase for an authoritative check, in case the
+    // cached role is stale.
+    try {
+      final row = await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', uid)
+          .maybeSingle();
+      final role = row?['role'] as String? ?? '';
+      isAdmin = role == 'admin';
+    } catch (_) {
+      // On network error fall back to the cached AuthProvider role.
+    }
+
+    if (!isAdmin && mounted) _redirectUnauthorized();
+  }
+
+  void _redirectUnauthorized() {
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/navigation');
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Unauthorized access'),
+      backgroundColor: Colors.red,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   Future<void> _checkHealth() async {
@@ -164,7 +201,7 @@ class _AdminNav extends StatelessWidget {
 
 // ── Dashboard Tab ─────────────────────────────────────────────────────────────
 
-class _DashboardTab extends StatelessWidget {
+class _DashboardTab extends StatefulWidget {
   const _DashboardTab({
     required this.backendOnline,
     required this.checkingBackend,
@@ -177,6 +214,97 @@ class _DashboardTab extends StatelessWidget {
   final VoidCallback onViewAllReports;
 
   @override
+  State<_DashboardTab> createState() => _DashboardTabState();
+}
+
+class _DashboardTabState extends State<_DashboardTab> {
+  // ── Summary stat state ────────────────────────────────────────────────────
+  int _userCount    = 0;
+  int _reportCount  = 0;
+  int _postCount    = 0;
+  bool _statsLoading = true;
+  String? _statsError;
+
+  RealtimeChannel? _usersChannel;
+  RealtimeChannel? _reportsChannel;
+  RealtimeChannel? _postsChannel;
+
+  SupabaseClient get _db => Supabase.instance.client;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStats();
+    _startStatStreams();
+  }
+
+  @override
+  void dispose() {
+    _usersChannel?.unsubscribe();
+    _reportsChannel?.unsubscribe();
+    _postsChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  // ── Supabase ───────────────────────────────────────────────────────────────
+
+  Future<void> _fetchStats() async {
+    setState(() { _statsLoading = true; _statsError = null; });
+    try {
+      final results = await Future.wait([
+        _db.from('profiles').select('id'),
+        _db.from('reports').select('id'),
+        _db.from('community_posts').select('id'),
+      ]);
+      if (mounted) {
+        setState(() {
+          _userCount   = (results[0] as List).length;
+          _reportCount = (results[1] as List).length;
+          _postCount   = (results[2] as List).length;
+          _statsLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[AdminDashboard] stats fetch error: $e');
+      if (mounted) setState(() { _statsLoading = false; _statsError = 'Failed'; });
+    }
+  }
+
+  void _startStatStreams() {
+    // Re-fetch all counts whenever any relevant table changes.
+    _usersChannel = _db.channel('admin_stat_users')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'profiles',
+          callback: (_) => _fetchStats(),
+        )
+        .subscribe();
+
+    _reportsChannel = _db.channel('admin_stat_reports')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'reports',
+          callback: (_) => _fetchStats(),
+        )
+        .subscribe();
+
+    _postsChannel = _db.channel('admin_stat_posts')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'community_posts',
+          callback: (_) => _fetchStats(),
+        )
+        .subscribe();
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
   Widget build(BuildContext context) {
     final reports = context.watch<ReportProvider>();
     final pending = reports.pendingReports.take(3).toList();
@@ -185,15 +313,32 @@ class _DashboardTab extends StatelessWidget {
       child: Column(
         children: [
           _AdminHeader(
-            backendOnline: backendOnline,
-            checkingBackend: checkingBackend,
+            backendOnline: widget.backendOnline,
+            checkingBackend: widget.checkingBackend,
           ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                _ApiLoadCard(backendOnline: backendOnline, onRefresh: onRefreshHealth),
+                // ── Stat cards ───────────────────────────────────────────
+                _StatsRow(
+                  userCount:    _userCount,
+                  reportCount:  _reportCount,
+                  postCount:    _postCount,
+                  loading:      _statsLoading,
+                  error:        _statsError,
+                  onRetry:      _fetchStats,
+                ),
+                const SizedBox(height: 16),
+
+                // ── Reports-per-day chart ────────────────────────────────
+                _ReportsChartCard(
+                  backendOnline: widget.backendOnline,
+                  onRefresh:     widget.onRefreshHealth,
+                ),
                 const SizedBox(height: 28),
+
+                // ── Pending reports list ─────────────────────────────────
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -203,7 +348,7 @@ class _DashboardTab extends StatelessWidget {
                             fontSize: 18,
                             fontWeight: FontWeight.bold)),
                     GestureDetector(
-                      onTap: onViewAllReports,
+                      onTap: widget.onViewAllReports,
                       child: const Text('View All',
                           style: TextStyle(color: _kSub, fontSize: 14)),
                     ),
@@ -226,6 +371,100 @@ class _DashboardTab extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Summary stat cards row ────────────────────────────────────────────────────
+
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({
+    required this.userCount,
+    required this.reportCount,
+    required this.postCount,
+    required this.loading,
+    required this.onRetry,
+    this.error,
+  });
+
+  final int userCount;
+  final int reportCount;
+  final int postCount;
+  final bool loading;
+  final String? error;
+  final VoidCallback onRetry;
+
+  String _fmt(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _StatCard(
+          icon: Icons.person_outline_rounded,
+          label: 'Users',
+          value: loading ? '—' : (error != null ? '!' : _fmt(userCount)),
+          color: _kGreen,
+        )),
+        const SizedBox(width: 10),
+        Expanded(child: _StatCard(
+          icon: Icons.flag_outlined,
+          label: 'Reports',
+          value: loading ? '—' : (error != null ? '!' : _fmt(reportCount)),
+          color: _kOrange,
+        )),
+        const SizedBox(width: 10),
+        Expanded(child: _StatCard(
+          icon: Icons.people_outline_rounded,
+          label: 'Posts',
+          value: loading ? '—' : (error != null ? '!' : _fmt(postCount)),
+          color: const Color(0xFF60A5FA),
+        )),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              color: _kText,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(label,
+              style: const TextStyle(color: _kSub, fontSize: 11)),
         ],
       ),
     );
@@ -321,43 +560,127 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-// ── API load chart card ───────────────────────────────────────────────────────
+// ── Reports-per-day chart card ────────────────────────────────────────────────
+// Replaces the former "System API Load" card (which used fake sine-wave data).
+// Now shows real reports submitted per day for the last 7 days from Supabase.
+// Chart library: fl_chart — LineChart / FlSpot (unchanged styling).
 
-class _ApiLoadCard extends StatefulWidget {
-  const _ApiLoadCard({required this.backendOnline, required this.onRefresh});
+class _ReportsChartCard extends StatefulWidget {
+  const _ReportsChartCard({
+    required this.backendOnline,
+    required this.onRefresh,
+  });
   final bool backendOnline;
   final VoidCallback onRefresh;
 
   @override
-  State<_ApiLoadCard> createState() => _ApiLoadCardState();
+  State<_ReportsChartCard> createState() => _ReportsChartCardState();
 }
 
-class _ApiLoadCardState extends State<_ApiLoadCard> {
-  late final List<FlSpot> _spots;
+class _ReportsChartCardState extends State<_ReportsChartCard> {
+  List<FlSpot> _spots = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  RealtimeChannel? _channel;
+
+  SupabaseClient get _db => Supabase.instance.client;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _spots = _generateSpots();
-  }
-
-  List<FlSpot> _generateSpots() {
-    final rng = math.Random(7);
-    return List.generate(20, (i) {
-      final base = 5000 + 8000 * math.sin(i * math.pi / 14);
-      final noise = (rng.nextDouble() - 0.5) * 3000;
-      return FlSpot(i.toDouble(), (base + noise).clamp(1000, 16000));
-    });
-  }
-
-  String _formatLoad(double v) {
-    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}k';
-    return v.toStringAsFixed(0);
+    _fetchData();
+    _startRealtime();
   }
 
   @override
+  void dispose() {
+    _channel?.unsubscribe();
+    super.dispose();
+  }
+
+  // ── Data fetching ──────────────────────────────────────────────────────────
+
+  /// Fetches reports from the last 7 days, groups by calendar date in Dart,
+  /// and maps the result to FlSpot (x = day index 0–6, y = daily count).
+  Future<void> _fetchData() async {
+    if (mounted) setState(() { _isLoading = true; _errorMessage = null; });
+    try {
+      final cutoff = DateTime.now().subtract(const Duration(days: 7));
+
+      final data = await _db
+          .from('reports')
+          .select('created_at')
+          .gte('created_at', cutoff.toIso8601String())
+          .order('created_at', ascending: true);
+
+      // Build a map: 'YYYY-MM-DD' → count, pre-filled with zeros for all 7 days.
+      final Map<String, int> byDay = {};
+      for (var i = 6; i >= 0; i--) {
+        final d = DateTime.now().subtract(Duration(days: i));
+        byDay[_dateKey(d)] = 0;
+      }
+
+      for (final row in (data as List)) {
+        final raw = row['created_at'] as String?;
+        final dt  = raw != null ? DateTime.tryParse(raw) : null;
+        if (dt != null) {
+          final k = _dateKey(dt.toLocal());
+          if (byDay.containsKey(k)) byDay[k] = byDay[k]! + 1;
+        }
+      }
+
+      // Oldest day → x=0, today → x=6 (matches the sorted insertion order).
+      final entries = byDay.entries.toList();
+      final spots = <FlSpot>[];
+      for (var i = 0; i < entries.length; i++) {
+        spots.add(FlSpot(i.toDouble(), entries[i].value.toDouble()));
+      }
+
+      if (mounted) setState(() { _spots = spots; _isLoading = false; });
+    } catch (e) {
+      debugPrint('[AdminDashboard] chart fetch error: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not load chart data';
+          _isLoading    = false;
+        });
+      }
+    }
+  }
+
+  void _startRealtime() {
+    _channel = _db
+        .channel('admin_chart_reports')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'reports',
+          callback: (_) => _fetchData(),
+        )
+        .subscribe();
+  }
+
+  String _dateKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  int get _totalThisWeek =>
+      _spots.fold(0, (s, p) => s + p.y.toInt());
+
+  /// Dynamic Y ceiling: at least 5, 25 % headroom above max.
+  double get _maxY {
+    if (_spots.isEmpty) return 5;
+    final peak = _spots.map((s) => s.y).reduce(math.max);
+    return math.max(peak * 1.25, 5).ceilToDouble();
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
   Widget build(BuildContext context) {
-    final currentVal = _spots.last.y;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -368,6 +691,7 @@ class _ApiLoadCardState extends State<_ApiLoadCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header row ─────────────────────────────────────────────────
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -375,63 +699,109 @@ class _ApiLoadCardState extends State<_ApiLoadCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('System API Load',
-                        style: TextStyle(
-                            color: _kText,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Reports This Week',
+                      style: TextStyle(
+                          color: _kText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 2),
-                    const Text('Requests / min',
-                        style: TextStyle(color: _kSub, fontSize: 12)),
+                    const Text(
+                      'New submissions / day',
+                      style: TextStyle(color: _kSub, fontSize: 12),
+                    ),
                   ],
                 ),
               ),
-              Text(
-                _formatLoad(currentVal),
-                style: const TextStyle(
-                    color: _kText, fontSize: 36, fontWeight: FontWeight.bold),
-              ),
+              // Big number: total reports in the last 7 days
+              if (_isLoading)
+                const SizedBox(
+                  width: 24, height: 24,
+                  child: CircularProgressIndicator(
+                      color: _kGreen, strokeWidth: 2),
+                )
+              else
+                Text(
+                  '$_totalThisWeek',
+                  style: const TextStyle(
+                      color: _kText,
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold),
+                ),
             ],
           ),
           const SizedBox(height: 20),
+
+          // ── Chart / loading / error ────────────────────────────────────
           SizedBox(
             height: 100,
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: 5000,
-                  getDrawingHorizontalLine: (_) => FlLine(
-                    color: Colors.white.withOpacity(0.05),
-                    strokeWidth: 1,
-                  ),
-                ),
-                titlesData: const FlTitlesData(show: false),
-                borderData: FlBorderData(show: false),
-                minY: 0,
-                maxY: 18000,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: _spots,
-                    isCurved: true,
-                    curveSmoothness: 0.35,
-                    color: Colors.white,
-                    barWidth: 2,
-                    dotData: FlDotData(
-                      show: true,
-                      checkToShowDot: (spot, _) => spot.x == _spots.last.x,
-                      getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                        radius: 5,
-                        color: _kGreen,
-                        strokeWidth: 0,
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                        color: _kGreen, strokeWidth: 2))
+                : _errorMessage != null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_errorMessage!,
+                              style: const TextStyle(
+                                  color: _kSub, fontSize: 12)),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: _fetchData,
+                            child: const Text(
+                              'Retry',
+                              style: TextStyle(
+                                  color: _kGreen,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      )
+                    : LineChart(
+                        LineChartData(
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: math.max(_maxY / 4, 1),
+                            getDrawingHorizontalLine: (_) => FlLine(
+                              color: Colors.white.withOpacity(0.05),
+                              strokeWidth: 1,
+                            ),
+                          ),
+                          titlesData: const FlTitlesData(show: false),
+                          borderData: FlBorderData(show: false),
+                          minY: 0,
+                          maxY: _maxY,
+                          lineBarsData: [
+                            LineChartBarData(
+                              // Same styling as the previous fake-data chart
+                              spots: _spots.isEmpty
+                                  ? [const FlSpot(0, 0)]
+                                  : _spots,
+                              isCurved: true,
+                              curveSmoothness: 0.35,
+                              color: Colors.white,
+                              barWidth: 2,
+                              dotData: FlDotData(
+                                show: true,
+                                checkToShowDot: (spot, _) =>
+                                    _spots.isNotEmpty &&
+                                    spot.x == _spots.last.x,
+                                getDotPainter: (_, __, ___, ____) =>
+                                    FlDotCirclePainter(
+                                  radius: 5,
+                                  color: _kGreen,
+                                  strokeWidth: 0,
+                                ),
+                              ),
+                              belowBarData: BarAreaData(show: false),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    belowBarData: BarAreaData(show: false),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
