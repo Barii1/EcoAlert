@@ -12,7 +12,7 @@ class AppConfig {
   // Default 10.0.2.2 reaches host machine from Android emulator.
   static const String uploadApiBaseUrl = String.fromEnvironment(
     'UPLOAD_API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5000',
+    defaultValue: 'http://192.168.1.27:5000',
   );
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',

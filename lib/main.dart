@@ -38,6 +38,7 @@ import 'screens/aqi_detail_screen.dart';
 import 'screens/flood_detail_screen.dart';
 import 'screens/model_status_screen.dart';
 import 'screens/aqi_image_classify_screen.dart';
+import 'screens/first_launch_walkthrough_screen.dart';
 
 import 'providers/alert_provider.dart';
 import 'providers/aqi_provider.dart';
@@ -187,6 +188,7 @@ class EcoAlertApp extends StatelessWidget {
             onGenerateRoute: (settings) {
               final routes = <String, Widget Function(RouteSettings)>{
                 '/splash': (_) => const SplashScreen(),
+                '/walkthrough': (_) => const FirstLaunchWalkthroughScreen(),
                 '/onboarding': (_) => const OnboardingScreen(),
                 '/location': (_) => const LocationPromptScreen(),
                 '/profile-setup': (_) => const ProfileSetupScreen(),

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
+import '../models/guide_model.dart';
 import '../widgets/app_background.dart';
 import '../widgets/surface_card.dart';
 
-class GuideDetailScreen extends StatelessWidget {
+class GuideDetailScreen extends StatefulWidget {
   const GuideDetailScreen({
     super.key,
     required this.title,
@@ -14,6 +16,7 @@ class GuideDetailScreen extends StatelessWidget {
     required this.readTimeLabel,
     this.accentColor = AppColors.primary,
     this.icon = Icons.menu_book_rounded,
+    this.guideContent,
   });
 
   final String title;
@@ -22,9 +25,51 @@ class GuideDetailScreen extends StatelessWidget {
   final Color accentColor;
   final IconData icon;
 
+  /// Optional structured content. When provided the screen renders from it;
+  /// otherwise falls back to the built-in _contentFor() logic.
+  final GuideContent? guideContent;
+
+  @override
+  State<GuideDetailScreen> createState() => _GuideDetailScreenState();
+}
+
+class _GuideDetailScreenState extends State<GuideDetailScreen> {
+  bool _markedAsRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReadState();
+  }
+
+  Future<void> _loadReadState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final read = prefs.getBool('read_guide_${widget.title}') ?? false;
+    if (mounted) setState(() => _markedAsRead = read);
+  }
+
+  Future<void> _markAsRead() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('read_guide_${widget.title}', true);
+    if (mounted) setState(() => _markedAsRead = true);
+  }
+
+  /// Resolve whichever content source is active into the internal model.
+  _GuideContent _resolveContent() {
+    if (widget.guideContent != null) {
+      return _GuideContent(
+        summary: null,
+        sections: widget.guideContent!.sections
+            .map((s) => _GuideSection(title: s.heading, steps: s.steps))
+            .toList(),
+      );
+    }
+    return _contentFor(title: widget.title, category: widget.category);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final content = _contentFor(title: title, category: category);
+    final content = _resolveContent();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -33,6 +78,7 @@ class GuideDetailScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // ── App bar ───────────────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 8, 8, 0),
                 child: Row(
@@ -44,7 +90,7 @@ class GuideDetailScreen extends StatelessWidget {
                     ),
                     Expanded(
                       child: Text(
-                        title,
+                        widget.title,
                         style: AppTextStyles.titleMed.copyWith(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w700,
@@ -56,6 +102,8 @@ class GuideDetailScreen extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // ── Content ───────────────────────────────────────────────────
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(
@@ -65,6 +113,7 @@ class GuideDetailScreen extends StatelessWidget {
                     AppSpacing.p24,
                   ),
                   children: [
+                    // Meta card (category + read time)
                     Container(
                       padding: const EdgeInsets.all(AppSpacing.p16),
                       decoration: BoxDecoration(
@@ -72,12 +121,12 @@ class GuideDetailScreen extends StatelessWidget {
                             BorderRadius.circular(AppSpacing.radius16),
                         gradient: LinearGradient(
                           colors: [
-                            accentColor.withOpacity(0.2),
+                            widget.accentColor.withOpacity(0.2),
                             AppColors.bgCard,
                           ],
                         ),
                         border: Border.all(
-                          color: accentColor.withOpacity(0.35),
+                          color: widget.accentColor.withOpacity(0.35),
                         ),
                       ),
                       child: Row(
@@ -85,11 +134,12 @@ class GuideDetailScreen extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: accentColor.withOpacity(0.15),
+                              color: widget.accentColor.withOpacity(0.15),
                               borderRadius:
                                   BorderRadius.circular(AppSpacing.radius12),
                             ),
-                            child: Icon(icon, color: accentColor, size: 28),
+                            child: Icon(widget.icon,
+                                color: widget.accentColor, size: 28),
                           ),
                           const SizedBox(width: AppSpacing.p12),
                           Expanded(
@@ -97,9 +147,9 @@ class GuideDetailScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  category,
+                                  widget.category,
                                   style: AppTextStyles.label.copyWith(
-                                    color: accentColor,
+                                    color: widget.accentColor,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -111,7 +161,7 @@ class GuideDetailScreen extends StatelessWidget {
                                         color: AppColors.textSecondary),
                                     const SizedBox(width: 6),
                                     Text(
-                                      readTimeLabel,
+                                      widget.readTimeLabel,
                                       style: AppTextStyles.bodySmall.copyWith(
                                         color: AppColors.textSecondary,
                                       ),
@@ -124,24 +174,33 @@ class GuideDetailScreen extends StatelessWidget {
                         ],
                       ),
                     ),
+
                     const SizedBox(height: AppSpacing.p16),
-                    SurfaceCard(
-                      child: Text(
-                        content.summary,
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textPrimary.withOpacity(0.9),
-                          height: 1.5,
+
+                    // Summary (only shown when using the fallback content)
+                    if (content.summary != null && content.summary!.isNotEmpty)
+                      Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: AppSpacing.p12),
+                        child: SurfaceCard(
+                          child: Text(
+                            content.summary!,
+                            style: AppTextStyles.body.copyWith(
+                              color: AppColors.textPrimary.withOpacity(0.9),
+                              height: 1.5,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.p12),
+
+                    // Guide sections
                     ...content.sections.map(
                       (s) => Padding(
                         padding:
                             const EdgeInsets.only(bottom: AppSpacing.p12),
                         child: _SectionCard(
                           title: s.title,
-                          accentColor: accentColor,
+                          accentColor: widget.accentColor,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -158,18 +217,19 @@ class GuideDetailScreen extends StatelessWidget {
                                         height: 24,
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
-                                          color: accentColor.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(
-                                              6),
+                                          color: widget.accentColor
+                                              .withOpacity(0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
                                           border: Border.all(
-                                            color:
-                                                accentColor.withOpacity(0.35),
+                                            color: widget.accentColor
+                                                .withOpacity(0.35),
                                           ),
                                         ),
                                         child: Text(
                                           '${i + 1}',
                                           style: AppTextStyles.label.copyWith(
-                                            color: accentColor,
+                                            color: widget.accentColor,
                                             fontWeight: FontWeight.w800,
                                             fontSize: 11,
                                           ),
@@ -195,6 +255,55 @@ class GuideDetailScreen extends StatelessWidget {
                         ),
                       ),
                     ),
+
+                    const SizedBox(height: AppSpacing.p8),
+
+                    // ── Mark as Read button ───────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: TextButton(
+                        onPressed: _markedAsRead ? null : _markAsRead,
+                        style: TextButton.styleFrom(
+                          backgroundColor: _markedAsRead
+                              ? AppColors.success.withOpacity(0.08)
+                              : AppColors.success.withOpacity(0.12),
+                          disabledBackgroundColor:
+                              AppColors.success.withOpacity(0.08),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radius12),
+                            side: BorderSide(
+                              color: AppColors.success
+                                  .withOpacity(_markedAsRead ? 0.2 : 0.35),
+                            ),
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _markedAsRead
+                                  ? Icons.check_circle_rounded
+                                  : Icons.check_circle_outline_rounded,
+                              size: 18,
+                              color: AppColors.success,
+                            ),
+                            const SizedBox(width: AppSpacing.p8),
+                            Text(
+                              _markedAsRead
+                                  ? 'Marked as Read'
+                                  : 'Mark as Read',
+                              style: AppTextStyles.titleMed.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -205,6 +314,8 @@ class GuideDetailScreen extends StatelessWidget {
     );
   }
 }
+
+// ── Section card ──────────────────────────────────────────────────────────────
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
@@ -251,10 +362,12 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _GuideContent {
-  const _GuideContent({required this.summary, required this.sections});
+// ── Internal content model ────────────────────────────────────────────────────
 
-  final String summary;
+class _GuideContent {
+  const _GuideContent({this.summary, required this.sections});
+
+  final String? summary;
   final List<_GuideSection> sections;
 }
 
@@ -265,7 +378,12 @@ class _GuideSection {
   final List<String> steps;
 }
 
-_GuideContent _contentFor({required String title, required String category}) {
+// ── Hardcoded fallback content ────────────────────────────────────────────────
+
+_GuideContent _contentFor({
+  required String title,
+  required String category,
+}) {
   if (category == 'Flood') {
     return const _GuideContent(
       summary:
@@ -364,7 +482,7 @@ _GuideContent _contentFor({required String title, required String category}) {
         ],
       ),
       _GuideSection(
-        title: 'If You’re Stuck',
+        title: 'If You\'re Stuck',
         steps: [
           'Stay in a safe high place; call emergency services early.',
           'Do not enter moving water; it can sweep you away.',

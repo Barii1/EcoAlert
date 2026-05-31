@@ -11,6 +11,7 @@ import '../widgets/premium_ux.dart';
 
 class AlertItem {
   const AlertItem({
+    required this.id,
     required this.title,
     required this.subtitle,
     required this.location,
@@ -26,6 +27,7 @@ class AlertItem {
     this.aqiLabel,
   });
 
+  final String id;
   final String title;
   final String subtitle;
   final String location;
@@ -67,6 +69,7 @@ class AlertItem {
       category = 'Other';
     }
     return AlertItem(
+      id: m.id,
       title: m.title,
       subtitle: m.description,
       location: m.location,
@@ -193,68 +196,115 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
               chips: _filterChips,
             ),
             Expanded(
-              child: alertProvider.isLoading && alertProvider.alerts.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const CircularProgressIndicator(
-                              color: AppColors.primary),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Loading alerts...',
-                            style: AppTextStyles.body
-                                .copyWith(color: AppColors.textPrimary),
-                          ),
-                        ],
-                      ),
-                    )
-                  : filteredAlerts.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.notifications_none_rounded,
-                                size: 64,
-                                color: AppColors.textSecondary,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No alerts in this category',
-                                style: AppTextStyles.titleMed
-                                    .copyWith(color: AppColors.textPrimary),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "You're all clear for now",
-                                style: AppTextStyles.body.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
-                          itemCount: filteredAlerts.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 14),
-                          itemBuilder: (context, index) {
-                            final alert = filteredAlerts[index];
-                            return _AlertCard(
-                              alert: alert,
-                              onTap: () => Navigator.pushNamed(
-                                context,
-                                '/alert-detail',
-                                arguments: alert,
-                              ),
-                            );
-                          },
-                        ),
+              child: _buildBody(context, alertProvider, filteredAlerts),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, AlertProvider alertProvider,
+      List<AlertItem> filteredAlerts) {
+    // First-load spinner
+    if (alertProvider.isLoading && alertProvider.alerts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text('Loading alerts...',
+                style: AppTextStyles.body
+                    .copyWith(color: AppColors.textPrimary)),
+          ],
+        ),
+      );
+    }
+
+    // Error state
+    if (alertProvider.hasError) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.wifi_off_rounded,
+                  size: 56, color: AppColors.textDisabled),
+              const SizedBox(height: 16),
+              Text('Could not load data',
+                  style: AppTextStyles.titleMed
+                      .copyWith(color: AppColors.textPrimary)),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: alertProvider.retry,
+                child: const Text('Try Again',
+                    style: TextStyle(color: AppColors.primary)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Empty state
+    if (filteredAlerts.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.notifications_off_outlined,
+                  size: 56, color: AppColors.textDisabled),
+              const SizedBox(height: 16),
+              Text('No active alerts for your area',
+                  style: AppTextStyles.body
+                      .copyWith(color: AppColors.textSecondary),
+                  textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // List with pull-to-refresh
+    return RefreshIndicator(
+      color: AppColors.primary,
+      backgroundColor: AppColors.bgCard,
+      onRefresh: alertProvider.fetchAlerts,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+        itemCount: filteredAlerts.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (context, index) {
+          final alert = filteredAlerts[index];
+          return Dismissible(
+            key: ValueKey('${alert.id}_$index'),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 24),
+              decoration: BoxDecoration(
+                color: Colors.red.shade700,
+                borderRadius:
+                    BorderRadius.circular(AppSpacing.radius16),
+              ),
+              child: const Icon(Icons.delete_outline,
+                  color: Colors.white, size: 28),
+            ),
+            onDismissed: (_) => alertProvider.dismissAlert(alert.id),
+            child: _AlertCard(
+              alert: alert,
+              onTap: () => Navigator.pushNamed(
+                context,
+                '/alert-detail',
+                arguments: alert,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

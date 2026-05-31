@@ -1,6 +1,8 @@
 import 'dart:async';
 
+// ADD in_app_review to pubspec.yaml to enable the review prompt below.
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
@@ -76,6 +78,21 @@ class _HomeScreenState extends State<HomeScreen> {
       alertProvider.fetchAlerts();
       floodProvider.loadForCity(city);
     });
+
+    _maybeRequestReview();
+  }
+
+  Future<void> _maybeRequestReview() async {
+    final prefs = await SharedPreferences.getInstance();
+    final count = (prefs.getInt('app_open_count') ?? 0) + 1;
+    await prefs.setInt('app_open_count', count);
+    if (count == 5) {
+      // ADD in_app_review to pubspec.yaml, then replace the lines below:
+      //   import 'package:in_app_review/in_app_review.dart';
+      //   final review = InAppReview.instance;
+      //   if (await review.isAvailable()) await review.requestReview();
+      debugPrint('[EcoAlert] In-app review prompt triggered (open #$count)');
+    }
   }
 
   @override

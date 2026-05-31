@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
 
@@ -14,8 +15,11 @@ class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _loadController;
+  late AnimationController _logoController;
   late Animation<double> _fadeAnim;
   late Animation<double> _loadAnim;
+  late Animation<double> _logoScaleAnim;
+  late Animation<double> _logoFadeAnim;
 
   @override
   void initState() {
@@ -36,6 +40,19 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
 
+    // Logo: 500ms scale-in with easeOutBack + fade-in
+    _logoController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    )..forward();
+
+    _logoScaleAnim = Tween<double>(begin: 0.65, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOutBack),
+    );
+    _logoFadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOut),
+    );
+
     _loadController = AnimationController(
       duration: const Duration(milliseconds: 3000),
       vsync: this,
@@ -48,9 +65,24 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    Future.delayed(const Duration(milliseconds: 3500), () {
+    Future.delayed(const Duration(milliseconds: 3500), () async {
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/login');
+      final prefs = await SharedPreferences.getInstance();
+      final seen = prefs.getBool('has_seen_walkthrough') ?? false;
+      if (!mounted) return;
+
+      if (!seen) {
+        Navigator.pushReplacementNamed(context, '/walkthrough');
+        return;
+      }
+
+      final biometricEnabled = prefs.getBool('biometric_enabled') ?? false;
+      // Hassaan: please register /biometric-gate route in main.dart
+      //   '/biometric-gate': (_) => const BiometricGateScreen(),
+      Navigator.pushReplacementNamed(
+        context,
+        biometricEnabled ? '/biometric-gate' : '/login',
+      );
     });
   }
 
@@ -58,6 +90,7 @@ class _SplashScreenState extends State<SplashScreen>
   void dispose() {
     _fadeController.dispose();
     _loadController.dispose();
+    _logoController.dispose();
     super.dispose();
   }
 
@@ -76,10 +109,16 @@ class _SplashScreenState extends State<SplashScreen>
             children: [
               const Spacer(flex: 2),
               Center(
-                child: Image.asset(
-                  'assets/images/mountain.png',
-                  width: screenWidth * 0.24,
-                  fit: BoxFit.contain,
+                child: FadeTransition(
+                  opacity: _logoFadeAnim,
+                  child: ScaleTransition(
+                    scale: _logoScaleAnim,
+                    child: Image.asset(
+                      'assets/images/mountain.png',
+                      width: screenWidth * 0.24,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 36),
