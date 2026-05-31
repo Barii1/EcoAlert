@@ -1,8 +1,28 @@
-// Hassaan/Bilal: run this SQL in Supabase:
+// Hassaan/Bilal: run this SQL in Supabase SQL Editor:
+//
 // ALTER TABLE profiles ADD COLUMN IF NOT EXISTS role text DEFAULT 'registered_user';
+// ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_suspended bool DEFAULT false;
 // Possible role values: 'admin', 'premium_user', 'registered_user', 'guest'
 // (The app also understands legacy values: 'premium' → premium_user,
 //  'registered' → registered_user, 'general' → guest)
+//
+// ── RLS policy so admins can update any profile's role/suspension ─────────────
+// Without this policy the Supabase client will silently reject role updates.
+//
+// -- Drop the default "users can only update their own row" policy first if it
+// -- exists, then add the admin-aware one:
+// DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+//
+// CREATE POLICY "admin_or_own_update" ON profiles
+// FOR UPDATE TO authenticated
+// USING (
+//   auth.uid() = id
+//   OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+// )
+// WITH CHECK (
+//   auth.uid() = id
+//   OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+// );
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -51,6 +71,16 @@ String _roleLabel(String canonical) =>
 Color _roleColor(String canonical) =>
     _kRoles.firstWhere((r) => r.value == canonical,
         orElse: () => _kRoles[2]).color;
+
+IconData _roleIcon(String canonical) {
+  switch (canonical) {
+    case 'admin':           return Icons.admin_panel_settings_rounded;
+    case 'premium_user':    return Icons.workspace_premium_rounded;
+    case 'registered_user': return Icons.person_rounded;
+    case 'guest':           return Icons.person_outline_rounded;
+    default:                return Icons.person_outline_rounded;
+  }
+}
 
 // ── Date formatter ────────────────────────────────────────────────────────────
 
@@ -231,12 +261,15 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
   // ── Bottom-sheet actions (suspend / unsuspend) ─────────────────────────────
 
   void _showActions(_UserRow user) {
+    final canonical = _canonicalRole(user.role);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: _kCard,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
+      builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -247,14 +280,107 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                   color: _kBorder,
                   borderRadius: BorderRadius.circular(2)),
             ),
-            const SizedBox(height: 16),
-            if (!user.isSuspended && user.role != 'admin')
+            const SizedBox(height: 12),
+
+            // ── User info header ───────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  _Avatar(initials: user.initials, suspended: user.isSuspended),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.email.isNotEmpty ? user.email : user.displayName,
+                          style: const TextStyle(
+                              color: _kText,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        _RoleBadge(
+                            canonical: canonical,
+                            suspended: user.isSuspended),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1, color: _kBorder),
+
+            // ── Change Role section ────────────────────────────────────
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'CHANGE ROLE',
+                  style: TextStyle(
+                      color: _kDim,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+
+            ..._kRoles.map((r) {
+              final isCurrent = r.value == canonical;
+              return ListTile(
+                dense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                leading: Container(
+                  width: 30, height: 30,
+                  decoration: BoxDecoration(
+                    color: r.color.withOpacity(isCurrent ? 0.2 : 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isCurrent ? Icons.check_rounded : _roleIcon(r.value),
+                    color: r.color,
+                    size: 15,
+                  ),
+                ),
+                title: Text(
+                  r.label,
+                  style: TextStyle(
+                    color: isCurrent ? r.color : _kText,
+                    fontSize: 13,
+                    fontWeight:
+                        isCurrent ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+                trailing: isCurrent
+                    ? const Text('Current',
+                        style: TextStyle(color: _kDim, fontSize: 11))
+                    : const Icon(Icons.chevron_right_rounded,
+                        color: _kDim, size: 16),
+                onTap: isCurrent
+                    ? null
+                    : () {
+                        Navigator.pop(sheetCtx);
+                        _confirmRoleChange(user, r.value);
+                      },
+              );
+            }),
+
+            const Divider(height: 1, color: _kBorder),
+
+            // ── Suspend / Reactivate ───────────────────────────────────
+            if (!user.isSuspended && canonical != 'admin')
               _SheetTile(
                 icon: Icons.block_rounded,
                 label: 'Suspend User',
                 color: _kRed,
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(sheetCtx);
                   _setSuspended(user, true);
                 },
               )
@@ -264,7 +390,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                 label: 'Reactivate Account',
                 color: _kGreen,
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(sheetCtx);
                   _setSuspended(user, false);
                 },
               ),

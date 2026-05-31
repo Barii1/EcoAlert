@@ -19,11 +19,20 @@
 //   category text           -- e.g. 'flood', 'air', 'heat', 'health'
 // );
 //
+// CREATE TABLE IF NOT EXISTS user_saved_guides (
+//   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+//   guide_title text NOT NULL,
+//   created_at timestamptz DEFAULT now(),
+//   PRIMARY KEY (user_id, guide_title)
+// );
+//
 // Recommended RLS:
 //   ALTER TABLE guides ENABLE ROW LEVEL SECURITY;
 //   CREATE POLICY "read_all" ON guides FOR SELECT USING (true);
 //   ALTER TABLE facts  ENABLE ROW LEVEL SECURITY;
 //   CREATE POLICY "read_all" ON facts  FOR SELECT USING (true);
+//   ALTER TABLE user_saved_guides ENABLE ROW LEVEL SECURITY;
+//   CREATE POLICY "own_saves" ON user_saved_guides USING (auth.uid() = user_id);
 
 import 'dart:async';
 
@@ -425,6 +434,35 @@ class _LearnScreenState extends State<LearnScreen> {
   // ── SharedPreferences ─────────────────────────────────────────────────────────
 
   Future<void> _loadSavedGuides() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+
+    if (uid != null) {
+      try {
+        final rows = await Supabase.instance.client
+            .from('user_saved_guides')
+            .select('guide_title')
+            .eq('user_id', uid);
+
+        final saved = {
+          for (final r in (rows as List))
+            (r as Map)['guide_title'] as String: true,
+        };
+
+        if (mounted) {
+          setState(() {
+            _savedGuides = {
+              for (final g in _activeGuides)
+                g.title: saved[g.title] ?? false,
+            };
+          });
+        }
+        return;
+      } catch (e) {
+        debugPrint('[LearnScreen] Supabase saved guides load error: $e');
+      }
+    }
+
+    // Guest / network error — fall back to SharedPreferences.
     final prefs = await SharedPreferences.getInstance();
     final map   = <String, bool>{};
     for (final g in _activeGuides) {
@@ -443,10 +481,33 @@ class _LearnScreenState extends State<LearnScreen> {
   }
 
   Future<void> _toggleSaved(_GuideItem guide) async {
-    final prefs = await SharedPreferences.getInstance();
-    final next  = !(_savedGuides[guide.title] ?? false);
-    await prefs.setBool('saved_guide_${guide.title}', next);
+    final next = !(_savedGuides[guide.title] ?? false);
     setState(() => _savedGuides[guide.title] = next);
+
+    // Always persist to SharedPreferences as local cache.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('saved_guide_${guide.title}', next);
+
+    // Sync to Supabase when logged in.
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid != null) {
+      try {
+        if (next) {
+          await Supabase.instance.client.from('user_saved_guides').upsert({
+            'user_id':     uid,
+            'guide_title': guide.title,
+          });
+        } else {
+          await Supabase.instance.client
+              .from('user_saved_guides')
+              .delete()
+              .eq('user_id', uid)
+              .eq('guide_title', guide.title);
+        }
+      } catch (e) {
+        debugPrint('[LearnScreen] Supabase toggle saved error: $e');
+      }
+    }
   }
 
   // ── Filtering ─────────────────────────────────────────────────────────────────
