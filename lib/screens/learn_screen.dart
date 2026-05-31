@@ -1088,78 +1088,86 @@ class _GuideGridCard extends StatelessWidget {
       children: [
         GestureDetector(
           onTap: onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.bgElevated,
-              borderRadius: BorderRadius.circular(AppSpacing.radius12),
-              border: Border(
-                left:   BorderSide(color: guide.color, width: 3),
-                top:    const BorderSide(color: AppColors.border),
-                right:  const BorderSide(color: AppColors.border),
-                bottom: const BorderSide(color: AppColors.border),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppSpacing.radius12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.bgElevated,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(AppSpacing.radius12),
               ),
-            ),
-            padding: const EdgeInsets.all(AppSpacing.p12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 40, height: 40,
-                      decoration: BoxDecoration(
-                        color: guide.color.withOpacity(0.20),
-                        borderRadius: BorderRadius.circular(10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 3, color: guide.color),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.p12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(
+                                  color: guide.color.withOpacity(0.20),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(guide.icon,
+                                    color: guide.color, size: 22),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: onToggleSaved,
+                                behavior: HitTestBehavior.opaque,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    saved
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    size: 18,
+                                    color: saved
+                                        ? AppColors.danger
+                                        : AppColors.textDisabled,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.p10),
+                          Text(
+                            guide.title,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              height: 1.3,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const Spacer(),
+                          Row(
+                            children: [
+                              Icon(Icons.schedule_rounded,
+                                  size: 11, color: AppColors.textDisabled),
+                              const SizedBox(width: 4),
+                              Text('${guide.duration} read',
+                                  style: AppTextStyles.label.copyWith(
+                                    color: AppColors.textDisabled,
+                                    fontSize: 10,
+                                  )),
+                            ],
+                          ),
+                        ],
                       ),
-                      child: Icon(guide.icon,
-                          color: guide.color, size: 22),
                     ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: onToggleSaved,
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          saved
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          size: 18,
-                          color: saved
-                              ? AppColors.danger
-                              : AppColors.textDisabled,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.p10),
-                Text(
-                  guide.title,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    height: 1.3,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const Spacer(),
-                Row(
-                  children: [
-                    Icon(Icons.schedule_rounded,
-                        size: 11, color: AppColors.textDisabled),
-                    const SizedBox(width: 4),
-                    Text('${guide.duration} read',
-                        style: AppTextStyles.label.copyWith(
-                          color: AppColors.textDisabled,
-                          fontSize: 10,
-                        )),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
