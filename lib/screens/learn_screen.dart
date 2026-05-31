@@ -1090,13 +1090,13 @@ class _GuideGridCard extends StatelessWidget {
           onTap: onTap,
           child: Container(
             decoration: BoxDecoration(
-              color: AppColors.bgCard,
+              color: AppColors.bgElevated,
               borderRadius: BorderRadius.circular(AppSpacing.radius12),
               border: Border(
                 left:   BorderSide(color: guide.color, width: 3),
-                top:    const BorderSide(color: AppColors.borderSubtle),
-                right:  const BorderSide(color: AppColors.borderSubtle),
-                bottom: const BorderSide(color: AppColors.borderSubtle),
+                top:    const BorderSide(color: AppColors.border),
+                right:  const BorderSide(color: AppColors.border),
+                bottom: const BorderSide(color: AppColors.border),
               ),
             ),
             padding: const EdgeInsets.all(AppSpacing.p12),
@@ -1109,7 +1109,7 @@ class _GuideGridCard extends StatelessWidget {
                     Container(
                       width: 40, height: 40,
                       decoration: BoxDecoration(
-                        color: guide.color.withOpacity(0.12),
+                        color: guide.color.withOpacity(0.20),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(guide.icon,
