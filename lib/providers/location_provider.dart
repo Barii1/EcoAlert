@@ -11,13 +11,44 @@ class LocationProvider extends ChangeNotifier {
   bool _hasRequestedPermission = false;
   bool _hasPermission = false;
 
-  Position? get currentPosition => _currentPosition;
-  String get currentCity => _currentCity;
-  String get currentArea => _currentArea;
+  // ── Debug / test location override ────────────────────────────────────────
+  Position? _debugPosition;
+  String? _debugCity;
+
+  bool get isDebugMode => _debugPosition != null;
+  Position? get currentPosition => _debugPosition ?? _currentPosition;
+  String get currentCity => _debugCity ?? _currentCity;
+  String get currentArea => _debugCity ?? _currentArea;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get hasRequestedPermission => _hasRequestedPermission;
   bool get hasPermission => _hasPermission;
+
+  /// Override GPS with a fixed coordinate for testing different Pakistan cities.
+  void setDebugLocation(double lat, double lon, String city) {
+    _debugPosition = Position(
+      latitude: lat,
+      longitude: lon,
+      timestamp: DateTime.now(),
+      accuracy: 0,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+      isMocked: true,
+    );
+    _debugCity = city;
+    notifyListeners();
+  }
+
+  /// Restore real GPS location.
+  void clearDebugLocation() {
+    _debugPosition = null;
+    _debugCity = null;
+    notifyListeners();
+  }
 
   Future<void> getCurrentLocation() async {
     if (_isLoading) return;
@@ -60,7 +91,6 @@ class LocationProvider extends ChangeNotifier {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // Get city name from coordinates
       await _getCityFromCoordinates(
         _currentPosition!.latitude,
         _currentPosition!.longitude,
@@ -103,7 +133,6 @@ class LocationProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      // Keep default city if geocoding fails
       _currentCity = 'Lahore';
       _currentArea = 'Lahore';
     }

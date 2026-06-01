@@ -14,6 +14,7 @@ import '../providers/location_provider.dart';
 import '../widgets/app_card.dart';
 import '../widgets/map_heatmap_layer.dart';
 import '../widgets/map_legend.dart';
+import 'debug_location_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -587,6 +588,21 @@ class _MapScreenState extends State<MapScreen> {
                         onTap: () => Navigator.pushNamed(context, '/profile'),
                         child: const Icon(Icons.settings_outlined,
                             color: AppColors.primary, size: 24),
+                      ),
+                      const SizedBox(width: 8),
+                      // Debug location picker — tap to test different Pakistan cities
+                      Consumer<LocationProvider>(
+                        builder: (_, loc, __) => AppCard(
+                          padding: EdgeInsets.zero,
+                          onTap: () => DebugLocationSheet.show(context),
+                          child: Icon(
+                            Icons.bug_report_rounded,
+                            color: loc.isDebugMode
+                                ? AppColors.warning
+                                : AppColors.primary,
+                            size: 24,
+                          ),
+                        ),
                       ),
                     ],
                   ),

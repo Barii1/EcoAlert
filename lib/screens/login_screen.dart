@@ -64,8 +64,8 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacementNamed(context, '/admin');
       return;
     }
-    // Offer biometric setup before navigating regular users.
-    await _maybeOfferBiometric();
+    // Biometric offer unwired — navigate directly.
+    // Re-enable by restoring: await _maybeOfferBiometric();
     if (!mounted) return;
     if (widget.onSuccess != null) {
       widget.onSuccess!.call();

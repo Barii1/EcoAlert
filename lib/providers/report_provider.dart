@@ -19,6 +19,7 @@ class ReportProvider extends ChangeNotifier {
   List<HazardReportModel> _reports = [];
   bool _isLoading = false;
   String? _errorMessage;
+  bool _pendingWrite = false; // suppresses stream re-emissions during in-flight writes
 
   List<HazardReportModel> get reports => List.unmodifiable(_reports);
   bool get isLoading => _isLoading;
@@ -66,6 +67,9 @@ class ReportProvider extends ChangeNotifier {
         )
         .listen(
           (rows) {
+            // Skip re-emission while an optimistic write is in flight — prevents
+            // the stream from overwriting local state before the DB commits.
+            if (_pendingWrite) return;
             _reports = rows.map((r) => HazardReportModel.fromJson(r)).toList();
             _isLoading = false;
             _errorMessage = null;
@@ -138,19 +142,28 @@ class ReportProvider extends ChangeNotifier {
         'image_urls': <String>[],
       };
 
+      // Step 1: save report text — this must succeed
       final newId = await _supabaseService!.insertRow(SupabaseTables.reports, data);
 
+      // Step 2: upload images — optional; a storage RLS failure won't kill the submission
       if (images != null && images.isNotEmpty) {
-        final urls = await UploadService.uploadReportImages(
-          reportId: newId,
-          uid: uid,
-          images: images,
-        );
-        await _supabaseService!.updateRow(
-          SupabaseTables.reports,
-          newId,
-          {'image_urls': urls, 'image_count': urls.length},
-        );
+        try {
+          final urls = await UploadService.uploadReportImages(
+            reportId: newId,
+            uid: uid,
+            images: images,
+          );
+          await _supabaseService!.updateRow(
+            SupabaseTables.reports,
+            newId,
+            {'image_urls': urls, 'image_count': urls.length},
+          );
+        } catch (uploadErr) {
+          // Report saved, images failed — surface a non-fatal warning
+          _errorMessage =
+              'Report submitted, but images could not be uploaded ($uploadErr). '
+              'Enable storage RLS in Supabase: allow INSERT on bucket "report-images".';
+        }
       }
 
       _isLoading = false;
@@ -170,6 +183,17 @@ class ReportProvider extends ChangeNotifier {
 
   Future<void> _setStatus(String reportId, ReportStatus status) async {
     if (_supabaseService == null) return;
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    final original = idx >= 0 ? _reports[idx] : null;
+
+    // Optimistic update + suppress stream re-emissions until the write lands
+    _pendingWrite = true;
+    if (idx >= 0) {
+      _reports = List.of(_reports)..[idx] = original!.copyWith(status: status);
+      notifyListeners();
+    }
+
     try {
       await _supabaseService!.updateRow(
         SupabaseTables.reports,
@@ -177,8 +201,13 @@ class ReportProvider extends ChangeNotifier {
         {'status': status.name},
       );
     } catch (e) {
+      if (idx >= 0 && original != null) {
+        _reports = List.of(_reports)..[idx] = original;
+      }
       _errorMessage = 'Failed to update report: $e';
       notifyListeners();
+    } finally {
+      _pendingWrite = false;
     }
   }
 

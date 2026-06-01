@@ -76,13 +76,9 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
 
-      final biometricEnabled = prefs.getBool('biometric_enabled') ?? false;
-      // Hassaan: please register /biometric-gate route in main.dart
-      //   '/biometric-gate': (_) => const BiometricGateScreen(),
-      Navigator.pushReplacementNamed(
-        context,
-        biometricEnabled ? '/biometric-gate' : '/login',
-      );
+      // Biometric gate unwired — always go to /login.
+      // Re-enable by restoring: biometricEnabled ? '/biometric-gate' : '/login'
+      Navigator.pushReplacementNamed(context, '/login');
     });
   }
 

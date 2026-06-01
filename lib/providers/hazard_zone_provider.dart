@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../config/city_hazard_zones.dart';
@@ -12,7 +10,6 @@ class HazardZoneProvider extends ChangeNotifier {
       : _supabaseService = supabaseService;
 
   final SupabaseService? _supabaseService;
-  StreamSubscription<List<Map<String, dynamic>>>? _subscription;
   List<HazardZoneModel> _zones = [];
   bool _isLoading = false;
 
@@ -21,33 +18,32 @@ class HazardZoneProvider extends ChangeNotifier {
 
   List<HazardZoneModel> get allZones {
     if (_zones.isNotEmpty) return List.unmodifiable(_zones);
-    final aqi = _fallbackZones('aqi');
-    final flood = _fallbackZones('flood');
-    return [...aqi, ...flood];
+    // Fall back to static config zones when DB is unavailable
+    return [..._fallbackZones('aqi'), ..._fallbackZones('flood')];
   }
 
-  void init() {
+  Future<void> init() async {
     if (_supabaseService == null) return;
-    _subscription?.cancel();
     _isLoading = true;
+    notifyListeners();
 
-    _subscription = _supabaseService!
-        .streamTable(
-          SupabaseTables.hazardZones,
-          primaryKeys: ['id'],
-        )
-        .listen(
-          (rows) {
-            _zones = rows.map(HazardZoneModel.fromJson).toList();
-            _isLoading = false;
-            notifyListeners();
-          },
-          onError: (e) {
-            _isLoading = false;
-            debugPrint('[HazardZoneProvider] stream error: $e');
-            notifyListeners();
-          },
-        );
+    try {
+      final rows = await _supabaseService!.getTable(
+        SupabaseTables.hazardZones,
+        orderBy: 'created_at',
+        descending: true,
+        limit: 200,
+      );
+      _zones = rows.map(HazardZoneModel.fromJson).toList();
+      debugPrint('[HazardZoneProvider] Loaded ${_zones.length} zones from DB');
+    } catch (e) {
+      // Table may not exist yet — fallback zones keep the map working
+      debugPrint('[HazardZoneProvider] fetch failed, using fallback: $e');
+      _zones = [];
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   List<HazardZoneModel> zonesForType(String type) {
@@ -71,11 +67,5 @@ class HazardZoneProvider extends ChangeNotifier {
           ),
         )
         .toList();
-  }
-
-  @override
-  void dispose() {
-    _subscription?.cancel();
-    super.dispose();
   }
 }

@@ -143,6 +143,35 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
             .toList();
         _loading = false;
       });
+    } on PostgrestException catch (e) {
+      // Column is_suspended not yet added — fetch without it (isSuspended defaults false)
+      // Run in Supabase SQL Editor:
+      // ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_suspended bool DEFAULT false;
+      if (e.code == '42703') {
+        await _loadUsersWithoutSuspended();
+      } else {
+        if (!mounted) return;
+        setState(() { _error = e.toString(); _loading = false; });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  Future<void> _loadUsersWithoutSuspended() async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('profiles')
+          .select('id, username, email, role, city, created_at')
+          .order('created_at', ascending: false);
+      if (!mounted) return;
+      setState(() {
+        _users = (rows as List)
+            .map((r) => _UserRow.fromMap(r as Map<String, dynamic>))
+            .toList();
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = e.toString(); _loading = false; });
@@ -156,7 +185,24 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'profiles',
-          callback: (_) => _loadUsers(),
+          callback: (payload) {
+            // Merge the changed row directly — avoids a full re-fetch that would
+            // race against in-flight optimistic updates and cause visible flicker.
+            final record = payload.newRecord;
+            if (record.isNotEmpty && mounted) {
+              final changedId = record['id']?.toString();
+              if (changedId != null) {
+                final idx = _users.indexWhere((u) => u.id == changedId);
+                if (idx >= 0) {
+                  setState(() => _users[idx] = _UserRow.fromMap(record));
+                } else {
+                  _loadUsers(); // new user — full reload
+                }
+                return;
+              }
+            }
+            _loadUsers(); // delete or unknown event
+          },
         )
         .subscribe();
   }
@@ -168,10 +214,18 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     try {
       await Supabase.instance.client
           .from('profiles')
-          .update({'is_suspended': suspended}).eq('id', user.id);
+          .update({'is_suspended': suspended})
+          .eq('id', user.id);
       _snack(suspended
           ? '${user.displayName} suspended'
           : '${user.displayName} reactivated');
+    } on PostgrestException catch (e) {
+      setState(() => _users[idx] = user);
+      if (e.code == '42703') {
+        _snack('Run migration: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_suspended bool DEFAULT false;');
+      } else {
+        _snack('Action failed: $e');
+      }
     } catch (e) {
       setState(() => _users[idx] = user);
       _snack('Action failed: $e');
@@ -185,7 +239,8 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     try {
       await Supabase.instance.client
           .from('profiles')
-          .update({'role': newRole}).eq('id', user.id);
+          .update({'role': newRole})
+          .eq('id', user.id);
       _snack('Role updated to ${_roleLabel(newRole)}');
     } catch (e) {
       setState(() => _users[idx] = user);
@@ -631,19 +686,15 @@ class _UserTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                // Created date + role badge
-                Row(
-                  children: [
-                    Text(
-                      'Joined ${_fmtDate(user.createdAt)}',
-                      style: const TextStyle(
-                          color: _kDim, fontSize: 11),
-                    ),
-                    const SizedBox(width: 8),
-                    _RoleBadge(
-                        canonical: canonical,
-                        suspended: user.isSuspended),
-                  ],
+                Text(
+                  user.isSuspended
+                      ? 'Suspended · Joined ${_fmtDate(user.createdAt)}'
+                      : 'Joined ${_fmtDate(user.createdAt)}',
+                  style: TextStyle(
+                    color: user.isSuspended ? _kOrange : _kDim,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -658,7 +709,9 @@ class _UserTile extends StatelessWidget {
               opacity: isOwnRow ? 0.35 : 1.0,
               child: IgnorePointer(
                 ignoring: isOwnRow,
-                child: Container(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 126),
+                  child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -671,6 +724,7 @@ class _UserTile extends StatelessWidget {
                     dropdownColor: _kCard,
                     underline: const SizedBox.shrink(),
                     isDense: true,
+                    isExpanded: true,
                     icon: const Icon(Icons.expand_more_rounded,
                         color: _kSub, size: 14),
                     style: const TextStyle(
@@ -701,10 +755,11 @@ class _UserTile extends StatelessWidget {
                       }
                     },
                   ),
-                ),
-              ),
-            ),
-          ),
+                  ),   // Container
+                ),     // ConstrainedBox
+              ),       // IgnorePointer
+            ),         // Opacity
+          ),           // Tooltip
 
           const SizedBox(width: 4),
 

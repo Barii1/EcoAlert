@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 import '../models/flood_model.dart';
+import '../services/notification_service.dart';
 import '../services/open_meteo_rainfall_source.dart';
 import '../services/openweather_weather_source.dart';
 import '../services/flood_risk_calculator.dart';
@@ -24,6 +25,30 @@ class FloodProvider extends ChangeNotifier {
   /// True when displayed data came from local cache (offline mode).
   bool _isFromCache = false;
   String? _cacheAge;
+
+  // ── Debug: force high risk regardless of model output ────────────────────
+  bool _debugForceHigh = false;
+  bool get debugForceHigh => _debugForceHigh;
+
+  void setDebugForceHigh(bool value) {
+    _debugForceHigh = value;
+    if (value && _risk != null) _applyForceHigh();
+    notifyListeners();
+  }
+
+  void _applyForceHigh() {
+    _risk = FloodRisk(
+      riskScore: 95,
+      level: FloodRiskLevel.critical,
+      city: _risk!.city,
+      explanation: '[DEBUG] Force-high mode active — simulating critical cloudburst risk.',
+      affectedAreas: _risk!.affectedAreas.isNotEmpty
+          ? _risk!.affectedAreas
+          : ['All low-lying areas'],
+      calculatedAt: DateTime.now(),
+      rainfall: _risk!.rainfall,
+    );
+  }
 
   FloodProvider() {
     _startRefreshTimer();
@@ -121,12 +146,26 @@ class FloodProvider extends ChangeNotifier {
         result = _localCalculator.calculate(rainfall, city);
       }
 
-      _risk = result;
+      // Apply debug force-high override before anything else reads the result
+      if (_debugForceHigh) {
+        _risk = result;
+        _applyForceHigh();
+      } else {
+        _risk = result;
+      }
       _isFromCache = false;
       _cacheAge = null;
 
+      // Fire a local notification whenever risk is High or Critical
+      final lvl = _risk!.level;
+      if (lvl == FloodRiskLevel.high || lvl == FloodRiskLevel.critical) {
+        NotificationService.instance
+            .showCloudburstAlert(city, lvl.name)
+            .catchError((_) {}); // never crash the provider if notification fails
+      }
+
       // ── Step 3: Save to cache for offline use ─────────────────────────
-      await CacheService.instance.saveFlood(city, _floodRiskToJson(result));
+      await CacheService.instance.saveFlood(city, _floodRiskToJson(_risk!));
 
     } catch (e) {
       // ── Step 4: Everything online failed → serve cached data ─────────

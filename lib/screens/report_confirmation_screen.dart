@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../config/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/report_provider.dart';
 
@@ -18,376 +19,368 @@ class ReportConfirmationScreen extends StatelessWidget {
     final hazardType = args?['hazardType'] ?? 'Hazard';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0f2323),
+      backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: Column(
           children: [
-            // Top Bar
+            // Top bar — fixed, not scrollable
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white60),
-                    onPressed: () {
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    },
+                    onPressed: () =>
+                        Navigator.of(context).popUntil((r) => r.isFirst),
                   ),
                 ],
               ),
             ),
-            // Main Content
+
+            // Scrollable body
             Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Success Animation/Icon
-                      Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF152a2a),
-                          border: Border.all(
-                            color: const Color(0xFF06e0e0).withOpacity(0.3),
-                            width: 2,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Success icon
+                    Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.bgCard,
+                        border: Border.all(
+                          color: AppColors.success.withOpacity(0.35),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.success.withOpacity(0.25),
+                            blurRadius: 24,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF06e0e0).withOpacity(0.4),
-                              blurRadius: 20,
-                              spreadRadius: 0,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.check,
-                          size: 48,
-                          color: Color(0xFF06e0e0),
-                        ),
+                        ],
                       ),
-                      const SizedBox(height: 32),
-                      // Headline
-                      const Text(
-                        'Report Sent',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
+                      child: const Icon(
+                        Icons.check_rounded,
+                        size: 48,
+                        color: AppColors.success,
                       ),
-                      const SizedBox(height: 16),
-                      // Impact Points
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF06e0e0).withOpacity(0.1),
-                          border: Border.all(
-                            color: const Color(0xFF06e0e0).withOpacity(0.2),
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.bolt,
-                              color: Color(0xFF06e0e0),
-                              size: 18,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              '+50 Impact Points',
-                              style: TextStyle(
-                                color: Color(0xFF06e0e0),
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Headline
+                    const Text(
+                      'Report Sent',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      const SizedBox(height: 24),
-                      // Body Text
-                      Text(
-                        isPremium
-                            ? 'Thank you for helping your community. Our AI has analyzed your report and Premium geo-alerts are notifying nearby users.'
-                            : 'Thank you for helping your community. Our AI has analyzed your report. Upgrade to Premium for geo-based warnings and priority notifications.',
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.white.withOpacity(0.7),
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Impact points badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withOpacity(0.1),
+                        border: Border.all(
+                            color: AppColors.success.withOpacity(0.25)),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const SizedBox(height: 40),
-                      // Contextual analysis (sensor data when available; otherwise explicit estimates)
-                      Builder(
-                        builder: (context) {
-                          final r = latestReport;
-                          final smogReport = hazardType.toString().toLowerCase().contains('smog') ||
-                              hazardType.toString().toLowerCase().contains('aqi');
-                          final hasSensorAqi = r != null && r.aqi > 0;
-                          final title = (smogReport && hasSensorAqi)
-                              ? 'Regional air quality (sensors)'
-                              : (hasSensorAqi
-                                  ? 'Environmental context'
-                                  : 'Hazard analysis');
-                          final detailLine = r == null
-                              ? 'No report data loaded yet.'
-                              : !hasSensorAqi
-                                  ? 'AQI and model confidence are not inferred for this hazard type on the device. '
-                                      'Submit a Smog / AQI report to attach the latest regional sensor snapshot when available.'
-                                  : () {
-                                      final pol = r.mainPollutant.isNotEmpty
-                                          ? r.mainPollutant
-                                          : 'pollutant mix';
-                                      final confText = r.confidence > 0
-                                          ? '${(r.confidence * 100).round()}% (model)'
-                                          : 'model confidence not available — sensor snapshot only, not verified for your photos';
-                                      return 'AQI: ${r.aqi} • $pol • $confText';
-                                    }();
-                          return Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF152a2a),
-                              border: Border.all(
-                                color: const Color(0xFF2a4a4a),
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  detailLine,
-                                  style: const TextStyle(
-                                    color: Color(0xFF06e0e0),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                if (smogReport && hasSensorAqi) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Estimated from public sensor feeds (for example WAQI), not from on-device image classification.',
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.75),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 6),
-                                Text(
-                                  isPremium
-                                      ? 'Geo-warning delivery: ENABLED'
-                                      : 'Geo-warning delivery: LOCKED (Premium)',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.75),
-                                  ),
-                                ),
-                                if (!isPremium) ...[
-                                  const SizedBox(height: 10),
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0f2323),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.06),
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      children: [
-                                        Icon(
-                                          Icons.notifications_active,
-                                          color: Color(0xFF06e0e0),
-                                          size: 18,
-                                        ),
-                                        SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            'Instant geo alerts to nearby users',
-                                            style: TextStyle(
-                                              color: Colors.white70,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                        Icon(Icons.lock, color: Colors.white54, size: 18),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 18),
-                      // Report Summary Card
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF152a2a),
-                          border: Border.all(
-                            color: const Color(0xFF2a4a4a),
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0f2323),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.cloud,
-                                color: Color(0xFF06e0e0),
-                                size: 32,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          hazardType,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF06e0e0)
-                                              .withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: const Text(
-                                          'PENDING REVIEW',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF06e0e0),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.location_on,
-                                        size: 12,
-                                        color: Colors.white60,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Gulberg III, Lahore',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white.withOpacity(0.6),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-                      // Actions
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF06e0e0),
-                            foregroundColor: const Color(0xFF0f2323),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
-                          onPressed: () {
-                            Navigator.of(context).popUntil((route) => route.isFirst);
-                          },
-                          child: const Text(
-                            'Return to Home',
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.bolt, color: AppColors.success, size: 18),
+                          SizedBox(width: 6),
+                          Text(
+                            '+50 Impact Points',
                             style: TextStyle(
-                              fontSize: 16,
+                              color: AppColors.success,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Body text
+                    Text(
+                      isPremium
+                          ? 'Thank you for helping your community. Our AI has analyzed your report and Premium geo-alerts are notifying nearby users.'
+                          : 'Thank you for helping your community. Our AI has analyzed your report. Upgrade to Premium for geo-based warnings and priority notifications.',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                        height: 1.6,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Hazard analysis card
+                    _AnalysisCard(
+                      hazardType: hazardType,
+                      latestReport: latestReport,
+                      isPremium: isPremium,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Report summary card
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgCard,
+                        border: Border.all(color: AppColors.borderSubtle),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: AppColors.bgElevated,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.cloud_outlined,
+                              color: AppColors.success,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        hazardType,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.warning.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'PENDING REVIEW',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.warning,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.location_on,
+                                        size: 12, color: Colors.white54),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        latestReport?.locationLabel ??
+                                            'Location unavailable',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Primary action
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          foregroundColor: AppColors.textInverse,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        onPressed: () =>
+                            Navigator.of(context).popUntil((r) => r.isFirst),
+                        child: const Text(
+                          'Return to Home',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(context).popUntil((route) => route.isFirst);
-                          // Navigate to alerts screen to view report
-                        },
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'View My Report',
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Secondary action
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.of(context).popUntil((r) => r.isFirst),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('View My Report',
                               style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.white60,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward,
-                              size: 18,
-                              color: Colors.white60,
-                            ),
-                          ],
-                        ),
+                                  fontSize: 14, color: Colors.white54)),
+                          SizedBox(width: 6),
+                          Icon(Icons.arrow_forward,
+                              size: 16, color: Colors.white54),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Analysis card extracted to keep build() readable ─────────────────────────
+
+class _AnalysisCard extends StatelessWidget {
+  const _AnalysisCard({
+    required this.hazardType,
+    required this.latestReport,
+    required this.isPremium,
+  });
+
+  final String hazardType;
+  final dynamic latestReport;
+  final bool isPremium;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = latestReport;
+    final isSmog = hazardType.toLowerCase().contains('smog') ||
+        hazardType.toLowerCase().contains('aqi');
+    final hasSensorAqi = r != null && r.aqi > 0;
+
+    final title = (isSmog && hasSensorAqi)
+        ? 'Regional air quality (sensors)'
+        : hasSensorAqi
+            ? 'Environmental context'
+            : 'Hazard analysis';
+
+    final String detailLine;
+    if (r == null) {
+      detailLine = 'No report data loaded yet.';
+    } else if (!hasSensorAqi) {
+      detailLine = 'AQI and model confidence are not inferred for this hazard '
+          'type on the device. Submit a Smog / AQI report to attach the latest '
+          'regional sensor snapshot when available.';
+    } else {
+      final pol =
+          r.mainPollutant.isNotEmpty ? r.mainPollutant : 'pollutant mix';
+      final confText = r.confidence > 0
+          ? '${(r.confidence * 100).round()}% (model)'
+          : 'sensor snapshot only — model not scored';
+      detailLine = 'AQI: ${r.aqi} • $pol • $confText';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        border: Border.all(color: AppColors.borderSubtle),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13)),
+          const SizedBox(height: 8),
+          Text(
+            detailLine,
+            style: TextStyle(
+              color: hasSensorAqi ? AppColors.success : AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+          if (isSmog && hasSensorAqi) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Estimated from public sensor feeds (e.g. WAQI), not from on-device image classification.',
+              style: TextStyle(
+                  color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            isPremium
+                ? 'Geo-warning delivery: ENABLED'
+                : 'Geo-warning delivery: LOCKED (Premium)',
+            style: TextStyle(
+              color: isPremium ? AppColors.success : AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          if (!isPremium) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.bgElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.borderSubtle),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.notifications_active,
+                      color: AppColors.primary, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Instant geo alerts to nearby users',
+                      style: TextStyle(
+                          color: Colors.white70, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Icon(Icons.lock, color: Colors.white38, size: 16),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

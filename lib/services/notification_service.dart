@@ -123,6 +123,27 @@ class NotificationService {
     debugPrint('[FCM] Unsubscribed from topic: $topic');
   }
 
+  /// Fire a local cloudburst / flash-flood alert. Tapping navigates to /flood-detail.
+  Future<void> showCloudburstAlert(String city, String riskLevel) async {
+    await _localNotifications.show(
+      city.hashCode ^ riskLevel.hashCode,
+      '⚠️ Cloudburst Alert — $city',
+      'Risk level: ${riskLevel.toUpperCase()}. Flash flooding may occur. Tap to view details.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'ecoalert_alerts',
+          'EcoAlert Alerts',
+          channelDescription: 'Environmental hazard alerts and warnings',
+          importance: Importance.max,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+          playSound: true,
+        ),
+      ),
+      payload: '/flood-detail',
+    );
+  }
+
   /// Subscribe to default topics for a city.
   Future<void> subscribeToCity(String city) async {
     final cityKey = city.toLowerCase().replaceAll(' ', '_');
