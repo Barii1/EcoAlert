@@ -52,11 +52,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void _onAuthStateChanged() {
     if (!mounted) return;
     final auth = _authProvider;
-    if (auth == null || !auth.isAuthenticated) return;
-    // Guard against double-fire: AuthProvider can notify twice during login
-    // (once when session resolves, once when profile finishes loading).
-    // Only navigate on the call where the profile/role is already set.
-    if (auth.currentUser == null) return;
+    if (auth == null) return;
+    if (!auth.isAuthenticated) return;
+    if (auth.isLoading) return;       // still fetching profile — wait
+    if (auth.currentUser == null) return; // profile not set yet — wait
     if (_navigated) return;
     _navigated = true;
     _handlePostLoginNavigation(auth);

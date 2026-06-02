@@ -270,11 +270,15 @@ class _ModelStatusScreenState extends State<ModelStatusScreen>
               ),
             ),
           ],
-          const Spacer(),
-          Text(
-            AppConfig.uploadApiBaseUrl,
-            style: AppTextStyles.label.copyWith(
-                color: AppColors.textDisabled, fontFamily: 'monospace'),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              AppConfig.uploadApiBaseUrl,
+              style: AppTextStyles.label.copyWith(
+                  color: AppColors.textDisabled, fontFamily: 'monospace'),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
           ),
         ],
       ),

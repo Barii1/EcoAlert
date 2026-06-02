@@ -80,6 +80,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
   bool    _loading    = true;
   String? _error;
   List<_UserRow> _users = [];
+  bool _pendingWrite = false; // suppress realtime re-fetch during active writes
   RealtimeChannel? _channel;
 
   String? get _currentUid => Supabase.instance.client.auth.currentUser?.id;
@@ -151,6 +152,9 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
           schema: 'public',
           table: 'profiles',
           callback: (payload) {
+            // Skip re-fetch while a write is in-flight — prevents the
+            // realtime event from racing against the optimistic update.
+            if (_pendingWrite) return;
             final record = payload.newRecord;
             if (record.isNotEmpty && mounted) {
               final id = record['id']?.toString();
@@ -171,39 +175,66 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
   Future<void> _setRole(_UserRow user, String newRole) async {
     final idx = _users.indexWhere((u) => u.id == user.id);
     if (idx < 0) return;
+
+    _pendingWrite = true;
     setState(() => _users[idx] = user.copyWith(role: newRole));
+
     try {
-      await Supabase.instance.client
+      final result = await Supabase.instance.client
           .from('profiles')
           .update({'role': newRole})
-          .eq('id', user.id);
-      _snack('Role updated to ${_roleInfo(newRole).label}');
+          .eq('id', user.id)
+          .select('id');
+
+      if ((result as List).isEmpty) {
+        // 0 rows affected — RLS blocked the write
+        if (mounted) setState(() => _users[idx] = user);
+        _snack('Permission denied. Check the admin_or_own_update RLS policy in Supabase.');
+      } else {
+        _snack('${user.displayName} → ${_roleInfo(newRole).label}');
+      }
     } catch (e) {
-      setState(() => _users[idx] = user);
+      if (mounted) setState(() => _users[idx] = user);
       _snack('Update failed: $e');
+    } finally {
+      _pendingWrite = false;
     }
   }
 
   Future<void> _setSuspended(_UserRow user, bool suspended) async {
     final idx = _users.indexWhere((u) => u.id == user.id);
     if (idx < 0) return;
+
+    _pendingWrite = true;
     setState(() => _users[idx] = user.copyWith(isSuspended: suspended));
+
     try {
-      await Supabase.instance.client
+      final result = await Supabase.instance.client
           .from('profiles')
           .update({'is_suspended': suspended})
-          .eq('id', user.id);
-      _snack(suspended ? '${user.displayName} suspended' : '${user.displayName} reactivated');
+          .eq('id', user.id)
+          .select('id');
+
+      if ((result as List).isEmpty) {
+        if (mounted) setState(() => _users[idx] = user);
+        _snack('Permission denied — check RLS policy or run the is_suspended migration.');
+      } else {
+        _snack(suspended
+            ? '${user.displayName} suspended'
+            : '${user.displayName} reactivated');
+      }
     } on PostgrestException catch (e) {
-      setState(() => _users[idx] = user);
+      if (mounted) setState(() => _users[idx] = user);
       if (e.code == '42703') {
         _snack('Run SQL: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_suspended bool DEFAULT false');
       } else {
         _snack('Failed: $e');
       }
     } catch (e) {
-      setState(() => _users[idx] = user);
+      if (mounted) setState(() => _users[idx] = user);
       _snack('Failed: $e');
+    } finally {
+      _pendingWrite = false;
     }
   }
 

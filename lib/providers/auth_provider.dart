@@ -158,13 +158,7 @@ class AuthProvider extends ChangeNotifier {
     }
 
     final role = readString(['role'], fallback: 'registered_user');
-    final mappedRole = (role == 'admin')
-        ? UserRole.admin
-        : (role == 'premium' || role == 'premium_user')
-            ? UserRole.premium
-            : (role == 'general' || role == 'guest')
-                ? UserRole.general
-                : UserRole.registered; // covers 'registered', 'registered_user', anything else
+    final mappedRole = UserModel.roleFromString(role);
     final rawConditions = profile?['health_conditions'];
     final healthConditions = rawConditions is List
         ? rawConditions.map((e) => e.toString()).toList()

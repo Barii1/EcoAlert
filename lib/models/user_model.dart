@@ -5,30 +5,12 @@ enum UserRole {
   admin,
 }
 
-UserRole _userRoleFromString(String? value) {
-  switch (value) {
-    case 'general':
-      return UserRole.general;
-    case 'premium':
-      return UserRole.premium;
-    case 'admin':
-      return UserRole.admin;
-    case 'registered':
-    default:
-      return UserRole.registered;
-  }
-}
-
 String _userRoleToString(UserRole role) {
   switch (role) {
-    case UserRole.general:
-      return 'general';
-    case UserRole.premium:
-      return 'premium';
-    case UserRole.admin:
-      return 'admin';
-    case UserRole.registered:
-      return 'registered';
+    case UserRole.admin:      return 'admin';
+    case UserRole.premium:    return 'premium_user';
+    case UserRole.general:    return 'guest';
+    case UserRole.registered: return 'registered_user';
   }
 }
 
@@ -57,6 +39,25 @@ class UserModel {
     this.healthConditions = const [],
   });
 
+  /// Single source of truth for DB string → UserRole mapping.
+  /// Used by both UserModel.fromJson and AuthProvider._profileToUserModel.
+  static UserRole roleFromString(String? value) {
+    switch (value?.trim().toLowerCase()) {
+      case 'admin':
+        return UserRole.admin;
+      case 'premium':
+      case 'premium_user':
+        return UserRole.premium;
+      case 'general':
+      case 'guest':
+        return UserRole.general;
+      case 'registered':
+      case 'registered_user':
+      default:
+        return UserRole.registered;
+    }
+  }
+
   factory UserModel.fromJson(Map<String, dynamic> json) {
     String readString(List<String> keys, {String fallback = ''}) {
       for (final key in keys) {
@@ -78,7 +79,7 @@ class UserModel {
             readString(['createdAt', 'created_at'])
           ) ??
           DateTime.now(),
-      role: _userRoleFromString(json['role'] as String?),
+      role: UserModel.roleFromString(json['role'] as String?),
       healthConditions: (json['health_conditions'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
