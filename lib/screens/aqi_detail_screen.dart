@@ -30,13 +30,12 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
 
   Future<void> _share() async {
     try {
-      final boundary =
-          _shareKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _shareKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) return;
 
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
 
       final file = File('${Directory.systemTemp.path}/ecoalert_aqi_share.png');
@@ -212,19 +211,20 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Pollutants',
-              style: AppTextStyles.titleMed
-                  .copyWith(fontWeight: FontWeight.w700)),
+              style:
+                  AppTextStyles.titleMed.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          _pollutantRow('PM2.5', reading.pm25, 'µg/m³',
-              reading.aqi / 500),
+          _pollutantRow('PM2.5', reading.pm25, 'µg/m³', reading.aqi / 500),
           _pollutantRow('PM10', reading.pm10, 'µg/m³',
               (reading.pm10 / 200).clamp(0.0, 1.0)),
-          _pollutantRow('O₃', reading.o3, 'ppb',
-              (reading.o3 / 100).clamp(0.0, 1.0)),
-          _pollutantRow('NO₂', reading.no2, 'ppb',
-              (reading.no2 / 100).clamp(0.0, 1.0)),
-          _pollutantRow('CO', reading.co, 'ppm',
-              (reading.co / 10).clamp(0.0, 1.0)),
+          _pollutantRow(
+              'O3', reading.o3, 'ug/m3', (reading.o3 / 180).clamp(0.0, 1.0)),
+          _pollutantRow(
+              'NO2', reading.no2, 'ug/m3', (reading.no2 / 200).clamp(0.0, 1.0)),
+          _pollutantRow(
+              'SO2', reading.so2, 'ug/m3', (reading.so2 / 350).clamp(0.0, 1.0)),
+          _pollutantRow(
+              'CO', reading.co, 'ug/m3', (reading.co / 10000).clamp(0.0, 1.0)),
         ],
       ),
     );
@@ -237,8 +237,7 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
       child: Row(
         children: [
           SizedBox(
-              width: 48,
-              child: Text(name, style: AppTextStyles.bodySmall)),
+              width: 48, child: Text(name, style: AppTextStyles.bodySmall)),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
@@ -272,15 +271,14 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('24h AQI Trend',
-              style: AppTextStyles.titleMed
-                  .copyWith(fontWeight: FontWeight.w700)),
+              style:
+                  AppTextStyles.titleMed.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           SizedBox(
             height: 180,
             child: LineChart(
               LineChartData(
-                gridData: const FlGridData(
-                    show: true, drawVerticalLine: false),
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
                 titlesData: FlTitlesData(
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
@@ -289,8 +287,7 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
                       getTitlesWidget: (value, meta) => Text(
                         value.toInt().toString(),
                         style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary
-                              .withOpacity(0.5),
+                          color: AppColors.textSecondary.withOpacity(0.5),
                           fontSize: 10,
                         ),
                       ),
@@ -311,8 +308,7 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
                           child: Text(
                             DateFormat('HH').format(hourly[i].hour),
                             style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.textSecondary
-                                  .withOpacity(0.5),
+                              color: AppColors.textSecondary.withOpacity(0.5),
                               fontSize: 10,
                             ),
                           ),
@@ -360,8 +356,7 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
     final bullets = <String>[];
     switch (reading.category) {
       case AqiCategory.good:
-        bullets.addAll(
-            ['Enjoy outdoor activities', 'Ventilate indoor spaces']);
+        bullets.addAll(['Enjoy outdoor activities', 'Ventilate indoor spaces']);
         break;
       case AqiCategory.moderate:
         bullets.addAll([
@@ -402,8 +397,8 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Precautions',
-              style: AppTextStyles.titleMed
-                  .copyWith(fontWeight: FontWeight.w700)),
+              style:
+                  AppTextStyles.titleMed.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           ...bullets.map((b) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -411,8 +406,7 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('• ', style: AppTextStyles.body),
-                    Expanded(
-                        child: Text(b, style: AppTextStyles.body)),
+                    Expanded(child: Text(b, style: AppTextStyles.body)),
                   ],
                 ),
               )),

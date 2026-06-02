@@ -112,12 +112,25 @@ class _AqiScanScreenState extends State<AqiScanScreen>
       debugPrint('[AqiScan] Image classification error: $e');
       if (mounted) {
         setState(() {
-          _imagePredictionError = e.toString().replaceFirst('Exception: ', '');
+          _imagePredictionError = _friendlyImageError(e);
         });
       }
     } finally {
       if (mounted) setState(() => _capturing = false);
     }
+  }
+
+  String _friendlyImageError(Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '');
+    if (message.contains('No route to host') ||
+        message.contains('SocketException') ||
+        message.contains('ClientException') ||
+        message.contains('Connection refused') ||
+        message.contains('TimeoutException') ||
+        message.contains('model server is not reachable')) {
+      return 'Image model server unavailable. Check Flask backend connection.';
+    }
+    return message;
   }
 
   @override
@@ -450,13 +463,13 @@ class _BottomPanel extends StatelessWidget {
           if (reading != null) ...[
             _PollutantBar(
                 label: 'PM2.5',
-                value: (reading!.aqi as int).toDouble(),
+                value: (reading!.pm25 as double),
                 max: 300,
                 color: accentColor),
             const SizedBox(height: 8),
             _PollutantBar(
                 label: 'PM10 ',
-                value: ((reading!.aqi as int) * 1.4).clamp(0, 300),
+                value: (reading!.pm10 as double),
                 max: 300,
                 color: accentColor.withOpacity(0.7)),
             const SizedBox(height: 16),
@@ -672,6 +685,7 @@ class _ImagePredictionPanel extends StatelessWidget {
 
     final label = result.assistedLabel ?? result.predictedLabel;
     final color = _colorForLabel(label);
+    final isModelResult = result.usedBackendModel;
     final imagePct = (result.confidence * 100).toStringAsFixed(1);
 
     return _panelShell(
@@ -683,8 +697,8 @@ class _ImagePredictionPanel extends StatelessWidget {
             children: [
               Icon(Icons.image_search_rounded, color: color, size: 18),
               const SizedBox(width: 8),
-              const Text(
-                'IMAGE AQI MODEL',
+              Text(
+                isModelResult ? 'IMAGE AQI MODEL' : 'LIVE AQI REFERENCE',
                 style: TextStyle(
                   color: Colors.white54,
                   fontSize: 10,
@@ -704,17 +718,36 @@ class _ImagePredictionPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            'Image prediction: ${result.predictedLabel} ($imagePct%)',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.76),
-              fontSize: 12,
+          if (isModelResult)
+            Text(
+              'Image prediction: ${result.predictedLabel} ($imagePct%)',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.76),
+                fontSize: 12,
+              ),
+            )
+          else
+            Text(
+              'Image model did not run for this scan.',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.76),
+                fontSize: 12,
+              ),
             ),
-          ),
           if (result.numericalLabel != null) ...[
             const SizedBox(height: 2),
             Text(
               'Live AQI reference: ${result.numericalLabel}',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.58),
+                fontSize: 11,
+              ),
+            ),
+          ],
+          if (result.assistanceNote != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              result.assistanceNote!,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.58),
                 fontSize: 11,

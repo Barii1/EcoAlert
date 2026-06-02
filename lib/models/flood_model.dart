@@ -9,12 +9,20 @@ DateTime? _floodDateTimeFromJson(dynamic value) {
   return null;
 }
 
+Map<String, double> _floodDoubleMapFromJson(dynamic value) {
+  final source = value is Map<String, dynamic> ? value : <String, dynamic>{};
+  return source.map((key, raw) {
+    final number = raw is num ? raw.toDouble() : double.tryParse('$raw');
+    return MapEntry(key, number ?? 0.0);
+  });
+}
+
 class RainfallData {
-  final double mm24h;         // Rainfall in last 24 hours (mm)
-  final double mmPerHour;     // Current intensity (mm/hr)
-  final double mm48h;         // Rainfall in last 48 hours (mm)
-  final double temperature;   // Ambient temperature (°C) — used by ML model
-  final double humidity;      // Relative humidity (%) — used by ML model
+  final double mm24h; // Rainfall in last 24 hours (mm)
+  final double mmPerHour; // Current intensity (mm/hr)
+  final double mm48h; // Rainfall in last 48 hours (mm)
+  final double temperature; // Ambient temperature (°C) — used by ML model
+  final double humidity; // Relative humidity (%) — used by ML model
   final DateTime timestamp;
 
   const RainfallData({
@@ -48,13 +56,17 @@ class RainfallData {
 }
 
 class FloodRisk {
-  final int riskScore;         // 0-100
+  final int riskScore; // 0-100
   final FloodRiskLevel level;
   final RainfallData rainfall;
   final String city;
   final List<String> affectedAreas;
   final String explanation;
   final DateTime calculatedAt;
+  final double? cloudburstProbability; // 0-1 from backend ML model
+  final FloodRiskLevel? cloudburstLevel;
+  final bool cloudburstUsingModel;
+  final Map<String, double> cloudburstFeatures;
 
   const FloodRisk({
     required this.riskScore,
@@ -64,6 +76,10 @@ class FloodRisk {
     required this.affectedAreas,
     required this.explanation,
     required this.calculatedAt,
+    this.cloudburstProbability,
+    this.cloudburstLevel,
+    this.cloudburstUsingModel = false,
+    this.cloudburstFeatures = const {},
   });
 
   factory FloodRisk.fromJson(Map<String, dynamic> json) {
@@ -79,6 +95,16 @@ class FloodRisk {
       explanation: json['explanation'] as String? ?? '',
       calculatedAt:
           _floodDateTimeFromJson(json['calculatedAt']) ?? DateTime.now(),
+      cloudburstProbability:
+          (json['cloudburstProbability'] as num?)?.toDouble(),
+      cloudburstLevel: json['cloudburstLevel'] == null
+          ? null
+          : FloodRiskLevel.values.firstWhere(
+              (l) => l.name == json['cloudburstLevel'],
+              orElse: () => FloodRiskLevel.low,
+            ),
+      cloudburstUsingModel: json['cloudburstUsingModel'] as bool? ?? false,
+      cloudburstFeatures: _floodDoubleMapFromJson(json['cloudburstFeatures']),
     );
   }
 
@@ -90,23 +116,35 @@ class FloodRisk {
         'affectedAreas': affectedAreas,
         'explanation': explanation,
         'calculatedAt': calculatedAt.toIso8601String(),
+        'cloudburstProbability': cloudburstProbability,
+        'cloudburstLevel': cloudburstLevel?.name,
+        'cloudburstUsingModel': cloudburstUsingModel,
+        'cloudburstFeatures': cloudburstFeatures,
       };
 
   Color get color {
     switch (level) {
-      case FloodRiskLevel.low: return const Color(0xFF00C853);
-      case FloodRiskLevel.moderate: return const Color(0xFFFFD600);
-      case FloodRiskLevel.high: return const Color(0xFFFF6D00);
-      case FloodRiskLevel.critical: return const Color(0xFFD50000);
+      case FloodRiskLevel.low:
+        return const Color(0xFF00C853);
+      case FloodRiskLevel.moderate:
+        return const Color(0xFFFFD600);
+      case FloodRiskLevel.high:
+        return const Color(0xFFFF6D00);
+      case FloodRiskLevel.critical:
+        return const Color(0xFFD50000);
     }
   }
 
   String get levelLabel {
     switch (level) {
-      case FloodRiskLevel.low: return 'Low Risk';
-      case FloodRiskLevel.moderate: return 'Moderate Risk';
-      case FloodRiskLevel.high: return 'High Risk';
-      case FloodRiskLevel.critical: return 'Critical Risk';
+      case FloodRiskLevel.low:
+        return 'Low Risk';
+      case FloodRiskLevel.moderate:
+        return 'Moderate Risk';
+      case FloodRiskLevel.high:
+        return 'High Risk';
+      case FloodRiskLevel.critical:
+        return 'Critical Risk';
     }
   }
 }

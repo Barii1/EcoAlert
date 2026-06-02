@@ -20,6 +20,10 @@ class AqiReading {
   final double co;
   final DateTime timestamp;
   final String city;
+  final int? predictedAqi;
+  final AqiCategory? predictedCategory;
+  final double? predictionConfidence;
+  final bool predictionUsingModel;
 
   const AqiReading({
     required this.aqi,
@@ -32,6 +36,10 @@ class AqiReading {
     required this.co,
     required this.timestamp,
     required this.city,
+    this.predictedAqi,
+    this.predictedCategory,
+    this.predictionConfidence,
+    this.predictionUsingModel = false,
   });
 
   factory AqiReading.fromJson(Map<String, dynamic> json) {
@@ -48,6 +56,15 @@ class AqiReading {
       co: (json['co'] as num?)?.toDouble() ?? 0,
       timestamp: _dateTimeFromJson(json['timestamp']) ?? DateTime.now(),
       city: json['city'] as String,
+      predictedAqi: (json['predictedAqi'] as num?)?.toInt(),
+      predictedCategory: json['predictedCategory'] == null
+          ? null
+          : _aqiCategoryFromJson(
+              json['predictedCategory'],
+              (json['predictedAqi'] as num?)?.toInt() ?? 0,
+            ),
+      predictionConfidence: (json['predictionConfidence'] as num?)?.toDouble(),
+      predictionUsingModel: json['predictionUsingModel'] as bool? ?? false,
     );
   }
 
@@ -62,6 +79,10 @@ class AqiReading {
         'co': co,
         'timestamp': timestamp.toIso8601String(),
         'city': city,
+        'predictedAqi': predictedAqi,
+        'predictedCategory': predictedCategory?.name,
+        'predictionConfidence': predictionConfidence,
+        'predictionUsingModel': predictionUsingModel,
       };
 
   Color get color {

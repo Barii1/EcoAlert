@@ -150,6 +150,10 @@ class AqiProvider extends ChangeNotifier {
         'co': r.co,
         'city': r.city,
         'timestamp': r.timestamp.toIso8601String(),
+        'predictedAqi': r.predictedAqi,
+        'predictedCategory': r.predictedCategory?.name,
+        'predictionConfidence': r.predictionConfidence,
+        'predictionUsingModel': r.predictionUsingModel,
       };
 
   AqiReading _aqiFromJson(Map<String, dynamic> j) {
@@ -161,6 +165,17 @@ class AqiProvider extends ChangeNotifier {
       for (final c in AqiCategory.values) {
         if (c.name == categoryStr) {
           category = c;
+          break;
+        }
+      }
+    }
+    final predictedAqi = (j['predictedAqi'] as num?)?.toInt();
+    AqiCategory? predictedCategory;
+    final predictedCategoryStr = j['predictedCategory'];
+    if (predictedCategoryStr is String) {
+      for (final c in AqiCategory.values) {
+        if (c.name == predictedCategoryStr) {
+          predictedCategory = c;
           break;
         }
       }
@@ -178,6 +193,10 @@ class AqiProvider extends ChangeNotifier {
       city: j['city'] as String? ?? _city,
       timestamp:
           DateTime.tryParse(j['timestamp'] as String? ?? '') ?? DateTime.now(),
+      predictedAqi: predictedAqi,
+      predictedCategory: predictedCategory,
+      predictionConfidence: (j['predictionConfidence'] as num?)?.toDouble(),
+      predictionUsingModel: j['predictionUsingModel'] as bool? ?? false,
     );
   }
 }

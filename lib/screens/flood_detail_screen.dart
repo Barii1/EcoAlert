@@ -25,13 +25,12 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
 
   Future<void> _share() async {
     try {
-      final boundary =
-          _shareKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _shareKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) return;
 
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
 
       final file =
@@ -94,10 +93,7 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
                 children: [
                   Text(
                     risk.city,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
@@ -120,26 +116,25 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(risk.explanation,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium),
+                            style: Theme.of(context).textTheme.bodyMedium),
                         const SizedBox(height: 8),
                         Text(
                           'Updated ${_formatTime(risk.calculatedAt)}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.5),
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.5),
+                                  ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
+                  _buildCloudburstCard(context, risk),
+                  if (risk.cloudburstProbability != null)
+                    const SizedBox(height: 16),
                   _buildRainfallCard(context, risk),
                   if (risk.affectedAreas.isNotEmpty) ...[
                     const SizedBox(height: 16),
@@ -183,20 +178,14 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
             children: [
               Text(
                 '${risk.riskScore}%',
-                style: Theme.of(context)
-                    .textTheme
-                    .displaySmall
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
                       color: risk.color,
                       fontWeight: FontWeight.w700,
                     ),
               ),
               Text(
                 risk.levelLabel,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: risk.color,
                       fontWeight: FontWeight.w700,
                     ),
@@ -214,6 +203,138 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCloudburstCard(BuildContext context, FloodRisk risk) {
+    final probability = risk.cloudburstProbability;
+    if (probability == null) return const SizedBox.shrink();
+
+    final percent = (probability * 100).round();
+    final level = risk.cloudburstLevel ?? FloodRiskLevel.low;
+    final color = _riskColor(level);
+    final features = risk.cloudburstFeatures;
+    final source = risk.cloudburstUsingModel ? 'AI model' : 'Rule-based';
+
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.thunderstorm_rounded, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Cloudburst Probability',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                source,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.6),
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$percent%',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              Text(
+                _levelLabel(level),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: probability.clamp(0.0, 1.0),
+              backgroundColor: color.withOpacity(0.12),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 8,
+            ),
+          ),
+          if (features.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                if (features.containsKey('temperature'))
+                  _featureChip(
+                    context,
+                    'Temp',
+                    '${features['temperature']!.toStringAsFixed(1)} C',
+                  ),
+                if (features.containsKey('humidity'))
+                  _featureChip(
+                    context,
+                    'Humidity',
+                    '${features['humidity']!.toStringAsFixed(0)}%',
+                  ),
+                if (features.containsKey('cloud_cover'))
+                  _featureChip(
+                    context,
+                    'Cloud',
+                    '${(features['cloud_cover']! / 8.0 * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                  ),
+                if (features.containsKey('wind_speed'))
+                  _featureChip(
+                    context,
+                    'Wind',
+                    '${features['wind_speed']!.toStringAsFixed(1)} km/h',
+                  ),
+                if (features.containsKey('pressure'))
+                  _featureChip(
+                    context,
+                    'Pressure',
+                    '${features['pressure']!.toStringAsFixed(0)} hPa',
+                  ),
+                if (features.containsKey('dew_point'))
+                  _featureChip(
+                    context,
+                    'Dew point',
+                    '${features['dew_point']!.toStringAsFixed(1)} C',
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _featureChip(BuildContext context, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$label: $value',
+        style: Theme.of(context).textTheme.bodySmall,
       ),
     );
   }
@@ -243,21 +364,17 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
     );
   }
 
-  Widget _rainRow(BuildContext context, IconData icon, String label,
-      String value) {
+  Widget _rainRow(
+      BuildContext context, IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon,
-              size: 20,
-              color: Theme.of(context).colorScheme.primary),
+          Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 12),
-          Text(label,
-              style: Theme.of(context).textTheme.bodyMedium),
+          Text(label, style: Theme.of(context).textTheme.bodyMedium),
           const Spacer(),
-          Text(value,
-              style: Theme.of(context).textTheme.titleSmall),
+          Text(value, style: Theme.of(context).textTheme.titleSmall),
         ],
       ),
     );
@@ -281,15 +398,11 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
                 child: Row(
                   children: [
                     Icon(Icons.location_on,
-                        size: 18,
-                        color:
-                            Theme.of(context).colorScheme.error),
+                        size: 18, color: Theme.of(context).colorScheme.error),
                     const SizedBox(width: 8),
                     Expanded(
                         child: Text(area,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium)),
+                            style: Theme.of(context).textTheme.bodyMedium)),
                   ],
                 ),
               )),
@@ -302,12 +415,10 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
     final steps = <String>[];
     switch (risk.level) {
       case FloodRiskLevel.low:
-        steps.addAll(
-            ['Monitor local news', 'Keep emergency contacts ready']);
+        steps.addAll(['Monitor local news', 'Keep emergency contacts ready']);
         break;
       case FloodRiskLevel.moderate:
-        steps.addAll(
-            ['Avoid low-lying areas', 'Prepare emergency kit']);
+        steps.addAll(['Avoid low-lying areas', 'Prepare emergency kit']);
         break;
       case FloodRiskLevel.high:
         steps.addAll([
@@ -351,15 +462,39 @@ class _FloodDetailScreenState extends State<FloodDetailScreen> {
                     const Text('• '),
                     Expanded(
                         child: Text(s,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium)),
+                            style: Theme.of(context).textTheme.bodyMedium)),
                   ],
                 ),
               )),
         ],
       ),
     );
+  }
+
+  Color _riskColor(FloodRiskLevel level) {
+    switch (level) {
+      case FloodRiskLevel.low:
+        return const Color(0xFF00C853);
+      case FloodRiskLevel.moderate:
+        return const Color(0xFFFFD600);
+      case FloodRiskLevel.high:
+        return const Color(0xFFFF6D00);
+      case FloodRiskLevel.critical:
+        return const Color(0xFFD50000);
+    }
+  }
+
+  String _levelLabel(FloodRiskLevel level) {
+    switch (level) {
+      case FloodRiskLevel.low:
+        return 'Low Risk';
+      case FloodRiskLevel.moderate:
+        return 'Moderate Risk';
+      case FloodRiskLevel.high:
+        return 'High Risk';
+      case FloodRiskLevel.critical:
+        return 'Critical Risk';
+    }
   }
 
   String _formatTime(DateTime dt) {

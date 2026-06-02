@@ -19,9 +19,6 @@ class FloodRiskCalculator {
   FloodRisk calculate(RainfallData rainfall, String city) {
     int score = 0;
 
-    // Base risk from city location (0-30)
-    score += _cityBaseRisk[city] ?? 15;
-
     // 24h rainfall contribution (0-35)
     if (rainfall.mm24h > 100) {
       score += 35;
@@ -50,6 +47,15 @@ class FloodRiskCalculator {
     } else if (rainfall.mm48h > 75) {
       score += 6;
     } else if (rainfall.mm48h > 30) {
+      score += 3;
+    }
+
+    // City vulnerability only matters when there is meaningful rainfall.
+    if (rainfall.mm24h > 10 || rainfall.mmPerHour > 5 || rainfall.mm48h > 30) {
+      score += _cityBaseRisk[city] ?? 15;
+    } else if (rainfall.mm24h > 0 ||
+        rainfall.mmPerHour > 0 ||
+        rainfall.mm48h > 0) {
       score += 3;
     }
 
@@ -88,7 +94,9 @@ class FloodRiskCalculator {
     if (r.mm48h > 75) {
       parts.add('saturated soil from 48h accumulation');
     }
-    return parts.isEmpty ? 'Based on current conditions and location risk.' : 'Contributing factors: ${parts.join(', ')}.';
+    return parts.isEmpty
+        ? 'Minimal rainfall detected; no meaningful flood risk from current conditions.'
+        : 'Contributing factors: ${parts.join(', ')}.';
   }
 
   List<String> _getAffectedAreas(String city, FloodRiskLevel level) {

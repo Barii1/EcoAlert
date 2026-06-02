@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:image/image.dart' as img;
 
 import '../config/app_config.dart';
 import '../models/aqi_model.dart';
@@ -16,6 +18,7 @@ class AqiImagePrediction {
     this.assistedConfidence,
     this.numericalLabel,
     this.assistanceNote,
+    this.usedBackendModel = true,
   });
 
   final String predictedLabel;
@@ -26,6 +29,7 @@ class AqiImagePrediction {
   final double? assistedConfidence;
   final String? numericalLabel;
   final String? assistanceNote;
+  final bool usedBackendModel;
 
   factory AqiImagePrediction.fromJson(Map<String, dynamic> json) {
     final topK = (json['topK'] as List<dynamic>? ?? [])
@@ -43,6 +47,21 @@ class AqiImagePrediction {
     );
   }
 
+  factory AqiImagePrediction.liveFallback(AqiReading reading) {
+    return AqiImagePrediction(
+      predictedLabel: reading.categoryLabel,
+      confidence: 0.0,
+      topK: const [],
+      probabilities: const {},
+      assistedLabel: reading.categoryLabel,
+      assistedConfidence: null,
+      numericalLabel: reading.categoryLabel,
+      assistanceNote:
+          'Image backend unavailable; using live pollutant AQI for this scan.',
+      usedBackendModel: false,
+    );
+  }
+
   AqiImagePrediction withAssistedReading(AqiReading? reading) {
     if (reading == null) return this;
 
@@ -50,16 +69,22 @@ class AqiImagePrediction {
     final numericalIndex = reading.category.index;
     if (imageIndex == null) return this;
 
-    final imageWeight = confidence >= 0.75 ? 0.55 : 0.35;
-    final numericalWeight = 1.0 - imageWeight;
-    final assistedIndex =
-        ((imageIndex * imageWeight) + (numericalIndex * numericalWeight))
-            .round()
-            .clamp(0, _orderedLabels.length - 1);
     final distance = (imageIndex - numericalIndex).abs();
+    final imageWeight = confidence >= 0.90 ? 0.45 : 0.25;
+    final numericalWeight = 1.0 - imageWeight;
+    var assistedIndex =
+        ((imageIndex * imageWeight) + (numericalIndex * numericalWeight))
+            .round();
+    if (distance >= 2 && confidence < 0.92) {
+      assistedIndex = assistedIndex.clamp(
+        numericalIndex - 1,
+        numericalIndex + 1,
+      );
+    }
+    assistedIndex = assistedIndex.clamp(0, _orderedLabels.length - 1);
     final note = distance <= 1
         ? 'Image model and live pollutant AQI are close.'
-        : 'Live pollutant AQI adjusted the visual estimate.';
+        : 'Live pollutant AQI stabilized the visual estimate.';
 
     return AqiImagePrediction(
       predictedLabel: predictedLabel,
@@ -71,6 +96,7 @@ class AqiImagePrediction {
           ((confidence * imageWeight) + numericalWeight).clamp(0.0, 1.0),
       numericalLabel: reading.categoryLabel,
       assistanceNote: note,
+      usedBackendModel: usedBackendModel,
     );
   }
 
@@ -116,21 +142,54 @@ class AqiImageScore {
 
 class AqiImageService {
   static String get _baseUrl => AppConfig.uploadApiBaseUrl;
+  static const String _usbFallbackBaseUrl = 'http://127.0.0.1:5000';
 
   static Future<AqiImagePrediction> predictImage(
     File image, {
     AqiReading? currentReading,
   }) async {
-    // Send the raw image bytes; preprocessing happens inside the model graph.
-    final uri = Uri.parse('$_baseUrl/api/aqi-image/predict');
+    final urls = <String>[
+      _baseUrl,
+      if (_baseUrl != _usbFallbackBaseUrl) _usbFallbackBaseUrl,
+    ];
+
+    Object? lastError;
+    for (final baseUrl in urls) {
+      try {
+        return await _predictImageAtBaseUrl(
+          baseUrl,
+          image,
+          currentReading: currentReading,
+        );
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (currentReading != null) {
+      return AqiImagePrediction.liveFallback(currentReading);
+    }
+
+    throw Exception(_friendlyError(lastError));
+  }
+
+  static Future<AqiImagePrediction> _predictImageAtBaseUrl(
+    String baseUrl,
+    File image, {
+    AqiReading? currentReading,
+  }) async {
+    final imageBytes = await _jpegBytesForUpload(image);
+
+    // Send a normalized JPEG; preprocessing happens inside the model graph.
+    final uri = Uri.parse('$baseUrl/api/aqi-image/predict');
     final request = http.MultipartRequest('POST', uri);
-    final stream = http.ByteStream(image.openRead());
-    final length = await image.length();
+    final stream = http.ByteStream.fromBytes(imageBytes);
     request.files.add(http.MultipartFile(
       'image',
       stream,
-      length,
-      filename: image.path.split('/').last,
+      imageBytes.length,
+      filename: 'aqi_scan.jpg',
+      contentType: _jpegContentType,
     ));
 
     final response = await request.send().timeout(
@@ -149,4 +208,27 @@ class AqiImageService {
     } catch (_) {}
     throw Exception(message);
   }
+
+  static String _friendlyError(Object? error) {
+    final message = error.toString();
+    if (message.contains('No route to host') ||
+        message.contains('SocketException') ||
+        message.contains('ClientException') ||
+        message.contains('Connection refused') ||
+        message.contains('Failed host lookup') ||
+        message.contains('TimeoutException')) {
+      return 'Image model server is not reachable. Keep the Flask backend running and the USB cable connected.';
+    }
+    return message.replaceFirst('Exception: ', '');
+  }
+
+  static Future<List<int>> _jpegBytesForUpload(File image) async {
+    final rawBytes = await image.readAsBytes();
+    final decoded = img.decodeImage(rawBytes);
+    if (decoded == null) return rawBytes;
+    final oriented = img.bakeOrientation(decoded);
+    return img.encodeJpg(oriented, quality: 92);
+  }
+
+  static final _jpegContentType = MediaType('image', 'jpeg');
 }

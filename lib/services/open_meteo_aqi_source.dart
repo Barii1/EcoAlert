@@ -26,8 +26,9 @@ class OpenMeteoAqiSource implements AqiDataSource {
         'latitude': coords.$1,
         'longitude': coords.$2,
         'hourly':
-            'pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_dioxide',
-        'current': 'nitrogen_dioxide,pm2_5,pm10,ozone',
+            'pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone,sulphur_dioxide',
+        'current':
+            'nitrogen_dioxide,pm2_5,pm10,ozone,us_aqi,carbon_monoxide,sulphur_dioxide',
         'domains': 'cams_global',
         'timezone': 'auto',
       },
@@ -41,24 +42,13 @@ class OpenMeteoAqiSource implements AqiDataSource {
     final pm25 = (current['pm2_5'] as num?)?.toDouble() ?? 0;
     final pm10 = (current['pm10'] as num?)?.toDouble() ?? 0;
     final no2 = (current['nitrogen_dioxide'] as num?)?.toDouble() ?? 0;
-    final so2 = _hourlyValueAtCurrentTime(
-      hourly,
-      currentTime,
-      'sulphur_dioxide',
-    );
+    final so2 = (current['sulphur_dioxide'] as num?)?.toDouble() ??
+        _hourlyValueAtCurrentTime(hourly, currentTime, 'sulphur_dioxide');
     final o3 = (current['ozone'] as num?)?.toDouble() ?? 0;
-    final co = _hourlyValueAtCurrentTime(
-      hourly,
-      currentTime,
-      'carbon_monoxide',
-    );
-    final aqiVal = _calculateUsAqi(
-      pm25: pm25,
-      pm10: pm10,
-      no2: no2,
-      o3: o3,
-      co: co,
-    );
+    final co = (current['carbon_monoxide'] as num?)?.toDouble() ??
+        _hourlyValueAtCurrentTime(hourly, currentTime, 'carbon_monoxide');
+    final aqiVal = (current['us_aqi'] as num?)?.toInt() ??
+        _calculateUsAqi(pm25: pm25, pm10: pm10, no2: no2, o3: o3, co: co);
 
     return AqiReading(
       aqi: aqiVal,
@@ -102,7 +92,7 @@ class OpenMeteoAqiSource implements AqiDataSource {
         'latitude': latitude,
         'longitude': longitude,
         'hourly':
-            'pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_dioxide',
+            'us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone,sulphur_dioxide',
         'past_hours': 0,
         'forecast_hours': hours,
         'domains': 'cams_global',
@@ -113,6 +103,7 @@ class OpenMeteoAqiSource implements AqiDataSource {
     final data = response.data as Map<String, dynamic>? ?? {};
     final hourly = data['hourly'] as Map<String, dynamic>? ?? {};
     final times = (hourly['time'] as List<dynamic>?)?.cast<String>() ?? [];
+    final usAqiValues = (hourly['us_aqi'] as List<dynamic>?) ?? [];
     final pm25Values = (hourly['pm2_5'] as List<dynamic>?) ?? [];
     final pm10Values = (hourly['pm10'] as List<dynamic>?) ?? [];
     final coValues = (hourly['carbon_monoxide'] as List<dynamic>?) ?? [];
@@ -125,13 +116,16 @@ class OpenMeteoAqiSource implements AqiDataSource {
     for (int i = 0; i < times.length; i++) {
       final dt = DateTime.tryParse(times[i]);
       if (dt == null || dt.isBefore(cutoff)) continue;
-      final aqiVal = _calculateUsAqi(
-        pm25: _listValue(pm25Values, i),
-        pm10: _listValue(pm10Values, i),
-        no2: _listValue(no2Values, i),
-        o3: _listValue(o3Values, i),
-        co: _listValue(coValues, i),
-      );
+      final openMeteoAqi = usAqiValues.length > i ? usAqiValues[i] : null;
+      final aqiVal = openMeteoAqi is num
+          ? openMeteoAqi.toInt()
+          : _calculateUsAqi(
+              pm25: _listValue(pm25Values, i),
+              pm10: _listValue(pm10Values, i),
+              no2: _listValue(no2Values, i),
+              o3: _listValue(o3Values, i),
+              co: _listValue(coValues, i),
+            );
       points.add(HourlyAqiPoint(hour: dt, aqi: aqiVal));
     }
 

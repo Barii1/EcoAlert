@@ -1,22 +1,18 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../config/app_config.dart';
-import '../models/flood_model.dart';
-import '../models/aqi_model.dart';
 
-/// Calls the EcoAlert Flask cloudburst prediction API.
+import '../config/app_config.dart';
+import '../models/aqi_model.dart';
+import '../models/flood_model.dart';
+import 'flood_risk_calculator.dart';
+
+/// Calls the EcoAlert Flask prediction APIs.
 ///
-/// Endpoint: POST [AppConfig.uploadApiBaseUrl]/api/predict/cloudburst
-///
-/// The backend:
-///   1. Receives latitude + longitude from Flutter
-///   2. Calls Open-Meteo (free, no key) to get today's weather features
-///   3. Runs the trained LogisticRegression cloudburst model
-///   4. Returns risk_level, probability, and the weather features used
-///
-/// If the request fails (offline, server down, timeout) this throws so the
-/// caller can fall back to the local rule-based FloodRiskCalculator.
+/// Cloudburst predictions are shown separately from flood risk. Flood risk stays
+/// based on rainfall/local conditions, while the backend model probability is
+/// attached as cloudburst metadata for display.
 class RemotePredictService {
   RemotePredictService._();
   static final RemotePredictService instance = RemotePredictService._();
@@ -25,20 +21,11 @@ class RemotePredictService {
 
   String get _baseUrl => AppConfig.uploadApiBaseUrl;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Cloudburst prediction — send lat/lon, backend handles the rest
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Sends user coordinates to Flask → backend fetches Open-Meteo weather
-  /// and runs the trained cloudburst model → returns a [FloodRisk].
-  ///
-  /// [latitude] and [longitude] are the user's current GPS coordinates.
-  /// [city] is optional display name.
   Future<FloodRisk> predictCloudburst({
     required double latitude,
     required double longitude,
     required String city,
-    required RainfallData rainfall, // still needed for FloodRisk model
+    required RainfallData rainfall,
   }) async {
     final body = jsonEncode({
       'latitude': latitude,
@@ -63,10 +50,6 @@ class RemotePredictService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return _toFloodRisk(data, rainfall, city);
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Alternative: send features directly (when you already have weather data)
-  // ─────────────────────────────────────────────────────────────────────────
 
   Future<FloodRisk> predictCloudburstFromFeatures({
     required double temperature,
@@ -104,11 +87,6 @@ class RemotePredictService {
     return _toFloodRisk(data, rainfall, city);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // AQI — pass-through (no custom ML AQI model deployed yet)
-  // AQI prediction now calls the Flask backend model endpoint.
-  // ─────────────────────────────────────────────────────────────────────────
-
   Future<AqiReading> predictAqi({required AqiReading currentReading}) async {
     final body = jsonEncode({
       'pm25': currentReading.pm25,
@@ -137,15 +115,17 @@ class RemotePredictService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final predictedAqi =
         (data['predicted_aqi'] as num?)?.toInt() ?? currentReading.aqi;
-    final category = AqiReading.categoryFromIndex(predictedAqi);
+    final predictedCategory = AqiReading.categoryFromIndex(predictedAqi);
+    final confidence = (data['confidence'] as num?)?.toDouble();
+    final usingModel = data['using_model'] == true;
 
     debugPrint(
-      '[RemotePredictService] AQI → $predictedAqi | model=${data['using_model'] == true} | city=${currentReading.city}',
+      '[RemotePredictService] AQI model -> $predictedAqi | live=${currentReading.aqi} | model=$usingModel | city=${currentReading.city}',
     );
 
     return AqiReading(
-      aqi: predictedAqi,
-      category: category,
+      aqi: currentReading.aqi,
+      category: currentReading.category,
       pm25: currentReading.pm25,
       pm10: currentReading.pm10,
       o3: currentReading.o3,
@@ -154,12 +134,12 @@ class RemotePredictService {
       co: currentReading.co,
       timestamp: DateTime.now(),
       city: currentReading.city,
+      predictedAqi: predictedAqi,
+      predictedCategory: predictedCategory,
+      predictionConfidence: confidence,
+      predictionUsingModel: usingModel,
     );
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Model status (useful for admin/debug screen)
-  // ─────────────────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getModelStatus() async {
     final response = await http
@@ -171,10 +151,6 @@ class RemotePredictService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Converter: API response → FloodRisk domain model
-  // ─────────────────────────────────────────────────────────────────────────
-
   FloodRisk _toFloodRisk(
     Map<String, dynamic> data,
     RainfallData rainfall,
@@ -185,32 +161,35 @@ class RemotePredictService {
         (data['cloudburst_probability'] as num?)?.toDouble() ?? 0.0;
     final usingModel = data['using_model'] as bool? ?? false;
     final features = data['features_used'] as Map<String, dynamic>? ?? {};
-
-    final FloodRiskLevel level = _parseLevel(levelStr);
-    // Map 0-1 probability to 0-100 score for the existing FloodRisk model
-    final int score = (probability * 100).round();
-
-    final confidence = '${(probability * 100).toStringAsFixed(0)}%';
-    final source = usingModel ? 'AI model' : 'rule-based estimate';
-    final explanation = 'Cloudburst $source (probability: $confidence). '
-        'Based on: temp ${features['temperature']?.toStringAsFixed(1) ?? '--'}°C, '
-        'humidity ${features['humidity']?.toStringAsFixed(0) ?? '--'}%, '
-        'cloud cover ${((features['cloud_cover'] ?? 0) / 8.0 * 100).toStringAsFixed(0)}%.';
+    final cloudburstLevel = _parseLevel(levelStr);
+    final localFloodRisk = FloodRiskCalculator().calculate(rainfall, city);
 
     debugPrint(
-      '[RemotePredictService] Cloudburst → $levelStr ($score) '
+      '[RemotePredictService] Cloudburst -> $levelStr (${(probability * 100).round()}%) '
       '| prob=$probability | model=$usingModel | city=$city',
     );
 
     return FloodRisk(
-      riskScore: score,
-      level: level,
+      riskScore: localFloodRisk.riskScore,
+      level: localFloodRisk.level,
       rainfall: rainfall,
       city: city,
-      affectedAreas: _affectedAreas(city, level),
-      explanation: explanation,
+      affectedAreas: localFloodRisk.affectedAreas,
+      explanation: localFloodRisk.explanation,
       calculatedAt: DateTime.now(),
+      cloudburstProbability: probability,
+      cloudburstLevel: cloudburstLevel,
+      cloudburstUsingModel: usingModel,
+      cloudburstFeatures: _numericFeatures(features),
     );
+  }
+
+  Map<String, double> _numericFeatures(Map<String, dynamic> features) {
+    return features.map((key, value) {
+      final number =
+          value is num ? value.toDouble() : double.tryParse('$value');
+      return MapEntry(key, number ?? 0.0);
+    });
   }
 
   FloodRiskLevel _parseLevel(String s) {
@@ -222,18 +201,5 @@ class RemotePredictService {
       default:
         return FloodRiskLevel.low;
     }
-  }
-
-  List<String> _affectedAreas(String city, FloodRiskLevel level) {
-    if (level == FloodRiskLevel.low) return [];
-    const areas = {
-      'Lahore': ['Ravi River banks', 'Shahdara', 'Data Darbar area'],
-      'Karachi': ['Lyari River corridor', 'Orangi Town', 'Korangi'],
-      'Peshawar': ['Kabul River banks', 'Charsadda Road areas'],
-      'Hyderabad': ['Indus River banks', 'Latifabad'],
-      'Sukkur': ['Indus floodplain', 'Rohri'],
-      'Islamabad': ['Soan River areas', 'Margalla foothills'],
-    };
-    return areas[city] ?? ['Low-lying areas', 'River-adjacent zones'];
   }
 }

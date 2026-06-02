@@ -452,7 +452,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: AppSpacing.p12),
         SizedBox(
-          height: 220,
+          height: 280,
           child: Consumer<AqiProvider>(
             builder: (context, aqi, _) {
               return Consumer<FloodProvider>(
@@ -681,7 +681,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 final isAdmin = context.read<AuthProvider>().isAdmin;
                 if (!isAdmin) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('AQI Image Scan is available for admins only'),
+                    content:
+                        Text('AQI Image Scan is available for admins only'),
                     behavior: SnackBarBehavior.floating,
                   ));
                   return;

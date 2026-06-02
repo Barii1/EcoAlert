@@ -41,7 +41,8 @@ class FloodProvider extends ChangeNotifier {
       riskScore: 95,
       level: FloodRiskLevel.critical,
       city: _risk!.city,
-      explanation: '[DEBUG] Force-high mode active — simulating critical cloudburst risk.',
+      explanation:
+          '[DEBUG] Force-high mode active — simulating critical cloudburst risk.',
       affectedAreas: _risk!.affectedAreas.isNotEmpty
           ? _risk!.affectedAreas
           : ['All low-lying areas'],
@@ -116,7 +117,8 @@ class FloodProvider extends ChangeNotifier {
       try {
         rainfall = await _openWeather.fetchRainfall(city);
       } catch (owmError) {
-        debugPrint('[FloodProvider] OpenWeather failed, using Open-Meteo: $owmError');
+        debugPrint(
+            '[FloodProvider] OpenWeather failed, using Open-Meteo: $owmError');
         rainfall = await _openMeteoRain.fetchRainfall(city);
       }
 
@@ -142,7 +144,8 @@ class FloodProvider extends ChangeNotifier {
         }
       } catch (modelError) {
         // Flask server unreachable → local rule-based calculator
-        debugPrint('[FloodProvider] Remote model failed, using local: $modelError');
+        debugPrint(
+            '[FloodProvider] Remote model failed, using local: $modelError');
         result = _localCalculator.calculate(rainfall, city);
       }
 
@@ -161,12 +164,12 @@ class FloodProvider extends ChangeNotifier {
       if (lvl == FloodRiskLevel.high || lvl == FloodRiskLevel.critical) {
         NotificationService.instance
             .showCloudburstAlert(city, lvl.name)
-            .catchError((_) {}); // never crash the provider if notification fails
+            .catchError(
+                (_) {}); // never crash the provider if notification fails
       }
 
       // ── Step 3: Save to cache for offline use ─────────────────────────
       await CacheService.instance.saveFlood(city, _floodRiskToJson(_risk!));
-
     } catch (e) {
       // ── Step 4: Everything online failed → serve cached data ─────────
       debugPrint('[FloodProvider] Online fetch failed: $e — trying cache');
@@ -208,16 +211,16 @@ class FloodProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────────────────
 
   static const Map<String, (double, double)> _cityCoords = {
-    'lahore':     (31.5497, 74.3436),
-    'karachi':    (24.8607, 67.0011),
-    'islamabad':  (33.7294, 73.0931),
+    'lahore': (31.5497, 74.3436),
+    'karachi': (24.8607, 67.0011),
+    'islamabad': (33.7294, 73.0931),
     'rawalpindi': (33.6007, 73.0679),
-    'peshawar':   (34.0151, 71.5249),
-    'multan':     (30.1978, 71.4711),
+    'peshawar': (34.0151, 71.5249),
+    'multan': (30.1978, 71.4711),
     'faisalabad': (31.4504, 73.1350),
-    'quetta':     (30.1798, 66.9750),
-    'hyderabad':  (25.3960, 68.3578),
-    'sukkur':     (27.7052, 68.8574),
+    'quetta': (30.1798, 66.9750),
+    'hyderabad': (25.3960, 68.3578),
+    'sukkur': (27.7052, 68.8574),
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -225,18 +228,22 @@ class FloodProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────────────────
 
   Map<String, dynamic> _floodRiskToJson(FloodRisk r) => {
-        'riskScore':     r.riskScore,
-        'level':         r.level.name,
-        'city':          r.city,
-        'explanation':   r.explanation,
+        'riskScore': r.riskScore,
+        'level': r.level.name,
+        'city': r.city,
+        'explanation': r.explanation,
         'affectedAreas': r.affectedAreas,
-        'calculatedAt':  r.calculatedAt.toIso8601String(),
+        'calculatedAt': r.calculatedAt.toIso8601String(),
+        'cloudburstProbability': r.cloudburstProbability,
+        'cloudburstLevel': r.cloudburstLevel?.name,
+        'cloudburstUsingModel': r.cloudburstUsingModel,
+        'cloudburstFeatures': r.cloudburstFeatures,
         'rainfall': {
-          'mm24h':       r.rainfall.mm24h,
-          'mm48h':       r.rainfall.mm48h,
-          'mmPerHour':   r.rainfall.mmPerHour,
+          'mm24h': r.rainfall.mm24h,
+          'mm48h': r.rainfall.mm48h,
+          'mmPerHour': r.rainfall.mmPerHour,
           'temperature': r.rainfall.temperature,
-          'humidity':    r.rainfall.humidity,
+          'humidity': r.rainfall.humidity,
         },
       };
 
@@ -246,23 +253,43 @@ class FloodProvider extends ChangeNotifier {
       (e) => e.name == levelStr,
       orElse: () => FloodRiskLevel.low,
     );
+    final cloudburstLevelStr = j['cloudburstLevel'] as String?;
+    final cloudburstLevel = cloudburstLevelStr == null
+        ? null
+        : FloodRiskLevel.values.firstWhere(
+            (e) => e.name == cloudburstLevelStr,
+            orElse: () => FloodRiskLevel.low,
+          );
     final r = j['rainfall'] as Map<String, dynamic>? ?? {};
     return FloodRisk(
-      riskScore:     (j['riskScore'] as num?)?.toInt() ?? 0,
-      level:         level,
-      city:          j['city'] as String? ?? _city,
-      explanation:   j['explanation'] as String? ?? '',
+      riskScore: (j['riskScore'] as num?)?.toInt() ?? 0,
+      level: level,
+      city: j['city'] as String? ?? _city,
+      explanation: j['explanation'] as String? ?? '',
       affectedAreas: (j['affectedAreas'] as List<dynamic>?)
               ?.map((e) => e as String)
-              .toList() ?? [],
-      calculatedAt:  DateTime.tryParse(j['calculatedAt'] as String? ?? '') ?? DateTime.now(),
+              .toList() ??
+          [],
+      calculatedAt: DateTime.tryParse(j['calculatedAt'] as String? ?? '') ??
+          DateTime.now(),
+      cloudburstProbability: (j['cloudburstProbability'] as num?)?.toDouble(),
+      cloudburstLevel: cloudburstLevel,
+      cloudburstUsingModel: j['cloudburstUsingModel'] as bool? ?? false,
+      cloudburstFeatures:
+          (j['cloudburstFeatures'] as Map<String, dynamic>? ?? {}).map(
+        (key, value) {
+          final number =
+              value is num ? value.toDouble() : double.tryParse('$value');
+          return MapEntry(key, number ?? 0.0);
+        },
+      ),
       rainfall: RainfallData(
-        mm24h:       (r['mm24h'] as num?)?.toDouble() ?? 0,
-        mm48h:       (r['mm48h'] as num?)?.toDouble() ?? 0,
-        mmPerHour:   (r['mmPerHour'] as num?)?.toDouble() ?? 0,
+        mm24h: (r['mm24h'] as num?)?.toDouble() ?? 0,
+        mm48h: (r['mm48h'] as num?)?.toDouble() ?? 0,
+        mmPerHour: (r['mmPerHour'] as num?)?.toDouble() ?? 0,
         temperature: (r['temperature'] as num?)?.toDouble() ?? 0,
-        humidity:    (r['humidity'] as num?)?.toDouble() ?? 0,
-        timestamp:   DateTime.now(),
+        humidity: (r['humidity'] as num?)?.toDouble() ?? 0,
+        timestamp: DateTime.now(),
       ),
     );
   }

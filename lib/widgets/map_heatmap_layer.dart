@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
+import '../config/city_hazard_zones.dart';
 import '../models/flood_model.dart';
 import '../models/hazard_zone_model.dart';
 import '../providers/aqi_provider.dart';
@@ -82,9 +83,8 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
                       setState(() {
-                        _selectedZone = _selectedZone == point.label
-                            ? null
-                            : point.label;
+                        _selectedZone =
+                            _selectedZone == point.label ? null : point.label;
                       });
                     },
                     child: AnimatedBuilder(
@@ -112,8 +112,9 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: _colorFor(point.value, widget.mode)
-                                            .withOpacity(0.5),
+                                        color:
+                                            _colorFor(point.value, widget.mode)
+                                                .withOpacity(0.5),
                                         blurRadius: 8,
                                       ),
                                     ],
@@ -152,36 +153,36 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
     final aqiOnly = mode == HeatmapMode.aqi;
     final cityAqi = aqi.current?.aqi ?? 50;
     final floodLevel = flood.risk?.level ?? FloodRiskLevel.low;
+    final rainfall = flood.risk?.rainfall;
 
     return zones
         .where((z) => aqiOnly ? z.type == 'aqi' : z.type == 'flood')
         .map((z) {
-          final value = aqiOnly
-              ? _zoneAqi(z.name, cityAqi).toDouble()
-              : _zoneFloodScore(z.name, floodLevel);
-          return _HeatmapPoint(
-            label: z.name,
-            location: LatLng(z.latitude, z.longitude),
-            value: value,
-          );
-        })
-        .toList(growable: false);
+      final value = aqiOnly
+          ? _zoneAqi(z.name, cityAqi).toDouble()
+          : _zoneFloodScore(z.name, floodLevel, rainfall);
+      return _HeatmapPoint(
+        label: z.name,
+        location: LatLng(z.latitude, z.longitude),
+        value: value,
+      );
+    }).toList(growable: false);
   }
 
   int _zoneAqi(String zoneName, int cityAqi) {
-    final spread = zoneName.hashCode.abs() % 90;
-    return (cityAqi - 25 + spread).clamp(25, 320);
+    return CityHazardZones.zoneAqi(zoneName, cityAqi);
   }
 
-  double _zoneFloodScore(String zoneName, FloodRiskLevel level) {
-    final base = switch (level) {
-      FloodRiskLevel.low => 22.0,
-      FloodRiskLevel.moderate => 48.0,
-      FloodRiskLevel.high => 72.0,
-      FloodRiskLevel.critical => 92.0,
-    };
-    final jitter = (zoneName.hashCode.abs() % 18) - 9;
-    return (base + jitter).clamp(8, 98);
+  double _zoneFloodScore(
+    String zoneName,
+    FloodRiskLevel level,
+    RainfallData? rainfall,
+  ) {
+    return CityHazardZones.zoneFloodScore(
+      zoneName,
+      level,
+      rainfall: rainfall,
+    );
   }
 
   Color _colorFor(double value, HeatmapMode mode) {
@@ -201,9 +202,9 @@ class _MapHeatmapLayerState extends State<MapHeatmapLayer>
 
   double _radiusFor(double value, HeatmapMode mode) {
     if (mode == HeatmapMode.aqi) {
-      return 700 + (value.clamp(0, 300) / 300) * 1800;
+      return 450 + (value.clamp(0, 250) / 250) * 950;
     }
-    return 600 + (value.clamp(0, 100) / 100) * 1600;
+    return 450 + (value.clamp(0, 100) / 100) * 900;
   }
 }
 
