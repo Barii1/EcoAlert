@@ -731,23 +731,33 @@ class _PostCardState extends State<_PostCard> {
                   ),
                 ),
 
-                // Category tag
+                // Category tag — reports get a special badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: accent.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(6),
-                    border:
-                        Border.all(color: accent.withOpacity(0.3)),
+                    border: Border.all(color: accent.withOpacity(0.3)),
                   ),
-                  child: Text(
-                    _categoryLabel(p.category),
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (p.isReport) ...[
+                        Icon(Icons.flag_rounded, size: 9, color: accent),
+                        const SizedBox(width: 3),
+                      ],
+                      Text(
+                        p.isReport
+                            ? 'Hazard Report'
+                            : _categoryLabel(p.category),
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 

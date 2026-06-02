@@ -36,6 +36,8 @@ class CommunityPost {
     this.likes = 0,
     this.isLikedByMe = false,
     this.imageUrl,
+    this.isReport = false,
+    this.reportStatus,
   });
 
   final String id;
@@ -49,21 +51,52 @@ class CommunityPost {
   final bool isLikedByMe;
   final String? imageUrl;
 
+  // True when this entry came from the reports table (not community_posts)
+  final bool isReport;
+  final String? reportStatus; // 'approved', 'resolved', etc.
+
   factory CommunityPost.fromMap(Map<String, dynamic> map, {String? myUid}) {
     final likedBy = (map['liked_by'] as List?)?.cast<String>() ?? [];
     return CommunityPost(
-      id: map['id'] as String,
-      userId: map['user_id'] as String? ?? '',
-      username: map['username'] as String? ?? 'Anonymous',
-      content: map['content'] as String? ?? '',
-      city: map['city'] as String? ?? '',
-      category: map['category'] as String? ?? 'general',
-      createdAt:
-          DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
-      likes: likedBy.length,
-      isLikedByMe: myUid != null && likedBy.contains(myUid),
-      imageUrl: map['image_url'] as String?,
+      id:        map['id'] as String,
+      userId:    map['user_id'] as String? ?? '',
+      username:  map['username'] as String? ?? 'Anonymous',
+      content:   map['content'] as String? ?? '',
+      city:      map['city'] as String? ?? '',
+      category:  map['category'] as String? ?? 'general',
+      createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      likes:        likedBy.length,
+      isLikedByMe:  myUid != null && likedBy.contains(myUid),
+      imageUrl:     map['image_url'] as String?,
     );
+  }
+
+  /// Build a community-feed entry from an approved hazard report row.
+  factory CommunityPost.fromReport(Map<String, dynamic> r) {
+    final images = (r['image_urls'] as List?)?.cast<String>() ?? [];
+    return CommunityPost(
+      id:           'report_${r['id']}',
+      userId:       r['reporter_uid'] as String? ?? '',
+      username:     r['reporter_name'] as String? ?? 'Anonymous',
+      content:      '${r['hazard_type'] ?? 'Hazard'}: ${r['details'] ?? ''}',
+      city:         r['location_label'] as String? ?? '',
+      category:     _hazardTypeToCategory(r['hazard_type'] as String?),
+      createdAt:    DateTime.tryParse(r['created_at'] as String? ?? '') ?? DateTime.now(),
+      imageUrl:     images.isNotEmpty ? images.first : null,
+      isReport:     true,
+      reportStatus: r['status'] as String?,
+    );
+  }
+
+  static String _hazardTypeToCategory(String? type) {
+    if (type == null) return 'general';
+    final t = type.toLowerCase();
+    if (t.contains('flood'))      return 'flood';
+    if (t.contains('aqi') || t.contains('smog')) return 'aqi';
+    if (t.contains('cloudburst') || t.contains('rain')) return 'flood';
+    if (t.contains('heat'))       return 'heatwave';
+    if (t.contains('road'))       return 'roads';
+    return 'general';
   }
 }
 
@@ -98,15 +131,35 @@ class CommunityProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final myUid = _db.auth.currentUser?.id;
-      final data = await _db
-          .from('community_posts')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(50);
-      _posts = (data as List)
-          .map((m) => CommunityPost.fromMap(
-              Map<String, dynamic>.from(m), myUid: myUid))
+
+      // Fetch community posts and approved hazard reports in parallel
+      final results = await Future.wait([
+        _db
+            .from('community_posts')
+            .select()
+            .order('created_at', ascending: false)
+            .limit(50),
+        _db
+            .from('reports')
+            .select('id, reporter_uid, reporter_name, hazard_type, details, location_label, image_urls, status, created_at')
+            .eq('status', 'approved')
+            .order('created_at', ascending: false)
+            .limit(50),
+      ]);
+
+      final communityPosts = (results[0] as List)
+          .map((m) => CommunityPost.fromMap(Map<String, dynamic>.from(m), myUid: myUid))
           .toList();
+
+      final reportPosts = (results[1] as List)
+          .map((r) => CommunityPost.fromReport(Map<String, dynamic>.from(r)))
+          .toList();
+
+      // Merge and sort by date descending
+      final merged = [...communityPosts, ...reportPosts]
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      _posts = merged;
     } catch (e) {
       _errorMessage = 'Could not load posts.';
       debugPrint('[Community] loadPosts error: $e');
@@ -121,12 +174,18 @@ class CommunityProvider extends ChangeNotifier {
   void startRealtime() {
     _realtimeChannel?.unsubscribe();
     _realtimeChannel = _db
-        .channel('community_posts_rt')
+        .channel('community_feed_rt')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'community_posts',
           callback: (_) => loadPosts(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'reports',
+          callback: (_) => loadPosts(), // reload when admin approves/rejects
         )
         .subscribe();
   }
