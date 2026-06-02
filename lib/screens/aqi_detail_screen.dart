@@ -70,6 +70,11 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
     }
 
     final hourly = context.watch<AqiProvider>().hourly;
+    final displayAqi = reading.predictedAqi ?? reading.aqi;
+    final displayCategory = reading.predictedCategory ?? reading.category;
+    final displayLabel = _categoryLabel(displayCategory);
+    final displayColor = _categoryColor(displayCategory);
+    final displayAdvice = _healthAdvice(displayCategory);
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -106,18 +111,29 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
                   const SizedBox(height: 24),
                   Center(
                     child: AqiGauge(
-                      aqi: reading.aqi,
-                      color: reading.color,
+                      aqi: displayAqi,
+                      color: displayColor,
                       size: 180,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Center(
                     child: Text(
-                      reading.categoryLabel,
+                      displayLabel,
                       style: AppTextStyles.headline.copyWith(
-                        color: reading.color,
+                        color: displayColor,
                         fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: Text(
+                      reading.predictedAqi != null
+                          ? 'EcoAlert ML predicted AQI'
+                          : 'EcoAlert AQI',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ),
@@ -126,11 +142,11 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
                     child: Row(
                       children: [
                         Icon(Icons.health_and_safety,
-                            color: reading.color, size: 28),
+                            color: displayColor, size: 28),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            reading.healthAdvice,
+                            displayAdvice,
                             style: AppTextStyles.body,
                           ),
                         ),
@@ -141,12 +157,14 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
                   _buildRiskChips(),
                   const SizedBox(height: 16),
                   _buildPollutantsCard(reading),
+                  const SizedBox(height: 16),
+                  _buildOpenMeteoReferenceCard(reading),
                   if (hourly.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _buildTrendChart(hourly),
                   ],
                   const SizedBox(height: 16),
-                  _buildPrecautionsList(reading),
+                  _buildPrecautionsList(displayCategory),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -161,9 +179,9 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
               repaintKey: _shareKey,
               city: reading.city,
               metricLabel: 'AQI',
-              value: reading.aqi.toString(),
-              valueLabel: reading.categoryLabel,
-              accentColor: reading.color,
+              value: displayAqi.toString(),
+              valueLabel: displayLabel,
+              accentColor: displayColor,
               timestamp: reading.timestamp,
             ),
           ),
@@ -225,6 +243,64 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
               'SO2', reading.so2, 'ug/m3', (reading.so2 / 350).clamp(0.0, 1.0)),
           _pollutantRow(
               'CO', reading.co, 'ug/m3', (reading.co / 10000).clamp(0.0, 1.0)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOpenMeteoReferenceCard(AqiReading reading) {
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.public_rounded, color: reading.color, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Open-Meteo US AQI Reference',
+                  style: AppTextStyles.titleMed.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${reading.aqi}',
+                style: AppTextStyles.displayMed.copyWith(
+                  color: reading.color,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    reading.categoryLabel,
+                    style: AppTextStyles.titleMed.copyWith(
+                      color: reading.color,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Live location-based US AQI from Open-Meteo/CAMS, shown as the external reference for pollutant readings.',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
         ],
       ),
     );
@@ -352,9 +428,9 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
     );
   }
 
-  Widget _buildPrecautionsList(AqiReading reading) {
+  Widget _buildPrecautionsList(AqiCategory category) {
     final bullets = <String>[];
-    switch (reading.category) {
+    switch (category) {
       case AqiCategory.good:
         bullets.addAll(['Enjoy outdoor activities', 'Ventilate indoor spaces']);
         break;
@@ -413,5 +489,56 @@ class _AqiDetailScreenState extends State<AqiDetailScreen> {
         ],
       ),
     );
+  }
+
+  Color _categoryColor(AqiCategory category) {
+    switch (category) {
+      case AqiCategory.good:
+        return const Color(0xFF00C853);
+      case AqiCategory.moderate:
+        return const Color(0xFFFFD600);
+      case AqiCategory.sensitive:
+        return const Color(0xFFFF6D00);
+      case AqiCategory.unhealthy:
+        return const Color(0xFFD50000);
+      case AqiCategory.veryUnhealthy:
+        return const Color(0xFF8E24AA);
+      case AqiCategory.hazardous:
+        return const Color(0xFF4A0000);
+    }
+  }
+
+  String _categoryLabel(AqiCategory category) {
+    switch (category) {
+      case AqiCategory.good:
+        return 'Good';
+      case AqiCategory.moderate:
+        return 'Moderate';
+      case AqiCategory.sensitive:
+        return 'Unhealthy for Sensitive Groups';
+      case AqiCategory.unhealthy:
+        return 'Unhealthy';
+      case AqiCategory.veryUnhealthy:
+        return 'Very Unhealthy';
+      case AqiCategory.hazardous:
+        return 'Hazardous';
+    }
+  }
+
+  String _healthAdvice(AqiCategory category) {
+    switch (category) {
+      case AqiCategory.good:
+        return 'Air quality is good. Outdoor activities are safe.';
+      case AqiCategory.moderate:
+        return 'Air quality is acceptable. Sensitive people should stay aware.';
+      case AqiCategory.sensitive:
+        return 'People with respiratory or heart conditions should reduce outdoor activity.';
+      case AqiCategory.unhealthy:
+        return 'Everyone should reduce prolonged outdoor exertion. Wear an N95 mask outdoors.';
+      case AqiCategory.veryUnhealthy:
+        return 'Avoid outdoor activities. Keep windows closed. Use air purifiers if available.';
+      case AqiCategory.hazardous:
+        return 'Health emergency. Stay indoors and avoid all outdoor exposure.';
+    }
   }
 }

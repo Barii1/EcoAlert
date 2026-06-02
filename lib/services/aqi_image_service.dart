@@ -65,66 +65,18 @@ class AqiImagePrediction {
   AqiImagePrediction withAssistedReading(AqiReading? reading) {
     if (reading == null) return this;
 
-    final imageIndex = _indexForLabel(predictedLabel);
-    final numericalIndex = reading.category.index;
-    if (imageIndex == null) return this;
-
-    final distance = (imageIndex - numericalIndex).abs();
-    final imageWeight = confidence >= 0.90 ? 0.45 : 0.25;
-    final numericalWeight = 1.0 - imageWeight;
-    var assistedIndex =
-        ((imageIndex * imageWeight) + (numericalIndex * numericalWeight))
-            .round();
-    if (distance >= 2 && confidence < 0.92) {
-      assistedIndex = assistedIndex.clamp(
-        numericalIndex - 1,
-        numericalIndex + 1,
-      );
-    }
-    assistedIndex = assistedIndex.clamp(0, _orderedLabels.length - 1);
-    final note = distance <= 1
-        ? 'Image model and live pollutant AQI are close.'
-        : 'Live pollutant AQI stabilized the visual estimate.';
-
     return AqiImagePrediction(
       predictedLabel: predictedLabel,
       confidence: confidence,
       topK: topK,
       probabilities: probabilities,
-      assistedLabel: _orderedLabels[assistedIndex],
-      assistedConfidence:
-          ((confidence * imageWeight) + numericalWeight).clamp(0.0, 1.0),
       numericalLabel: reading.categoryLabel,
-      assistanceNote: note,
+      assistanceNote:
+          'Live AQI reference only; image result above is raw ML output.',
       usedBackendModel: usedBackendModel,
     );
   }
-
-  static int? _indexForLabel(String label) {
-    final normalized = label.toLowerCase();
-    for (var i = 0; i < _orderedLabels.length; i++) {
-      if (normalized == _orderedLabels[i].toLowerCase()) return i;
-    }
-    if (normalized.contains('sensitive')) return 2;
-    if (normalized.contains('very')) return 4;
-    if (normalized.contains('severe') || normalized.contains('hazardous')) {
-      return 5;
-    }
-    if (normalized.contains('unhealthy')) return 3;
-    if (normalized.contains('moderate')) return 1;
-    if (normalized.contains('good')) return 0;
-    return null;
-  }
 }
-
-const _orderedLabels = [
-  'Good',
-  'Moderate',
-  'Unhealthy for Sensitive Groups',
-  'Unhealthy',
-  'Very Unhealthy',
-  'Severe',
-];
 
 class AqiImageScore {
   const AqiImageScore({required this.label, required this.confidence});

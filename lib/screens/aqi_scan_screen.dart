@@ -6,6 +6,7 @@ import 'dart:io';
 import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
+import '../models/aqi_model.dart';
 import '../providers/aqi_provider.dart';
 import '../providers/location_provider.dart';
 import '../services/aqi_image_service.dart';
@@ -225,7 +226,10 @@ class _AqiScanScreenState extends State<AqiScanScreen>
                   top: MediaQuery.of(context).padding.top + 64,
                   left: 24,
                   right: 24,
-                  child: _AqiPill(reading: reading),
+                  child: _AqiPill(
+                    reading: reading,
+                    prediction: _imagePrediction,
+                  ),
                 ),
 
               // ── Bottom panel ──────────────────────────────────────────
@@ -318,17 +322,99 @@ class _AqiScanScreenState extends State<AqiScanScreen>
 
 // ── AQI pill floating at top ─────────────────────────────────────────────────
 class _AqiPill extends StatelessWidget {
-  const _AqiPill({required this.reading});
+  const _AqiPill({
+    required this.reading,
+    required this.prediction,
+  });
+
   final dynamic reading;
+  final AqiImagePrediction? prediction;
+
+  bool get _hasImageModelResult => prediction?.usedBackendModel == true;
+
+  bool get _hasAqiModelResult =>
+      reading.predictedAqi != null && reading.predictedCategory != null;
+
+  Color _colorForLabel(String label) {
+    final value = label.toLowerCase();
+    if (value.contains('good')) return AppColors.success;
+    if (value.contains('moderate')) return const Color(0xFFFFD700);
+    if (value.contains('sensitive')) return AppColors.warning;
+    if (value.contains('very')) return AppColors.danger;
+    if (value.contains('severe')) return AppColors.critical;
+    if (value.contains('unhealthy')) return const Color(0xFFFF6D00);
+    return reading.color as Color;
+  }
+
+  Color _colorForCategory(AqiCategory category) {
+    switch (category) {
+      case AqiCategory.good:
+        return AppColors.success;
+      case AqiCategory.moderate:
+        return const Color(0xFFFFD700);
+      case AqiCategory.sensitive:
+        return AppColors.warning;
+      case AqiCategory.unhealthy:
+        return AppColors.danger;
+      case AqiCategory.veryUnhealthy:
+        return const Color(0xFF8E24AA);
+      case AqiCategory.hazardous:
+        return AppColors.critical;
+    }
+  }
+
+  String _categoryLabel(AqiCategory category) {
+    switch (category) {
+      case AqiCategory.good:
+        return 'Good';
+      case AqiCategory.moderate:
+        return 'Moderate';
+      case AqiCategory.sensitive:
+        return 'Unhealthy for Sensitive Groups';
+      case AqiCategory.unhealthy:
+        return 'Unhealthy';
+      case AqiCategory.veryUnhealthy:
+        return 'Very Unhealthy';
+      case AqiCategory.hazardous:
+        return 'Hazardous';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final aqiModelCategory = reading.predictedCategory as AqiCategory?;
+    final displayLabel = _hasImageModelResult
+        ? prediction!.predictedLabel
+        : _hasAqiModelResult
+            ? _categoryLabel(aqiModelCategory!)
+            : reading.categoryLabel as String;
+    final displayColor = _hasImageModelResult
+        ? _colorForLabel(displayLabel)
+        : _hasAqiModelResult
+            ? _colorForCategory(aqiModelCategory!)
+            : reading.color as Color;
+    final circleText = _hasImageModelResult
+        ? '${(prediction!.confidence * 100).round()}%'
+        : _hasAqiModelResult
+            ? '${reading.predictedAqi}'
+            : '${reading.aqi}';
+    final subtitle = _hasImageModelResult
+        ? 'Image model result'
+        : _hasAqiModelResult
+            ? 'AQI model result'
+            : reading.city.split(',').first as String;
+    final badgeText = _hasImageModelResult
+        ? 'IMG ML'
+        : _hasAqiModelResult
+            ? 'AQI ML'
+            : 'LIVE';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.70),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: reading.color.withOpacity(0.4)),
+        border: Border.all(color: displayColor.withOpacity(0.4)),
       ),
       child: Row(
         children: [
@@ -337,14 +423,14 @@ class _AqiPill extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: reading.color.withOpacity(0.15),
-              border: Border.all(color: reading.color.withOpacity(0.4)),
+              color: displayColor.withOpacity(0.15),
+              border: Border.all(color: displayColor.withOpacity(0.4)),
             ),
             child: Center(
               child: Text(
-                '${reading.aqi}',
+                circleText,
                 style: TextStyle(
-                  color: reading.color,
+                  color: displayColor,
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
                 ),
@@ -357,9 +443,9 @@ class _AqiPill extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  reading.categoryLabel.toUpperCase(),
+                  displayLabel.toUpperCase(),
                   style: TextStyle(
-                    color: reading.color,
+                    color: displayColor,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
@@ -367,7 +453,7 @@ class _AqiPill extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  reading.city.split(',').first,
+                  subtitle,
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 11,
@@ -383,8 +469,8 @@ class _AqiPill extends StatelessWidget {
               color: Colors.white.withOpacity(0.07),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Text(
-              'LIVE',
+            child: Text(
+              badgeText,
               style: TextStyle(
                 color: Colors.white54,
                 fontSize: 9,
@@ -420,8 +506,26 @@ class _BottomPanel extends StatelessWidget {
   final VoidCallback onViewAqi;
 
   String get _tipText {
+    if (imagePrediction?.usedBackendModel == true) {
+      final label = imagePrediction!.predictedLabel.toLowerCase();
+      if (label.contains('good')) {
+        return 'Image model indicates clean conditions.';
+      }
+      if (label.contains('moderate')) {
+        return 'Image model indicates moderate air quality. Sensitive groups should stay cautious.';
+      }
+      if (label.contains('sensitive')) {
+        return 'Image model indicates sensitive groups should limit outdoor time.';
+      }
+      if (label.contains('very') || label.contains('severe')) {
+        return 'Image model indicates severe pollution. Avoid outdoor activity.';
+      }
+      if (label.contains('unhealthy')) {
+        return 'Image model indicates unhealthy air. Keep windows closed.';
+      }
+    }
     if (reading == null) return 'Loading air quality data...';
-    final aqi = reading!.aqi as int;
+    final aqi = (reading!.predictedAqi ?? reading!.aqi) as int;
     if (aqi <= 50) {
       return 'Air quality is great. Safe for all outdoor activities.';
     }
@@ -683,7 +787,9 @@ class _ImagePredictionPanel extends StatelessWidget {
     final result = prediction;
     if (result == null) return const SizedBox.shrink();
 
-    final label = result.assistedLabel ?? result.predictedLabel;
+    final label = result.usedBackendModel
+        ? result.predictedLabel
+        : result.assistedLabel ?? result.predictedLabel;
     final color = _colorForLabel(label);
     final isModelResult = result.usedBackendModel;
     final imagePct = (result.confidence * 100).toStringAsFixed(1);
