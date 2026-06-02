@@ -14,3 +14,4 @@ requests
 PyJWT
 uvicorn
 asgiref
+httpx

@@ -24,6 +24,7 @@ import '../widgets/weather_forecast_widget.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/quick_tip_chip.dart';
 import '../widgets/surface_card.dart';
+import '../widgets/daily_brief_widget.dart';
 import 'alerts_screen.dart';
 import 'guide_detail_screen.dart';
 import 'map_screen.dart';
@@ -172,6 +173,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       // Environmental Conditions (AQI + Flood)
                       _buildEnvironmentSection(context),
                       const SizedBox(height: AppSpacing.p16),
+
+                      // AI Daily Brief widget
+                      const DailyBriefWidget(),
+                      const SizedBox(height: AppSpacing.p24),
 
                       // 3-day weather forecast
                       _buildForecastSection(context),
