@@ -256,19 +256,24 @@ class AuthProvider extends ChangeNotifier {
 
       try {
         _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[AuthProvider] Profile fetch error: $e');
         _profile = null;
       }
+      if (_profile == null) {
+        debugPrint('[AuthProvider] WARNING: profile is null for ${user.email} — '
+            'check RLS SELECT policy on profiles table and that the row exists.');
+      } else {
+        debugPrint('[AuthProvider] Profile loaded — role: ${_profile!['role']} '
+            'email: ${user.email}');
+      }
       _currentUser = _profileToUserModel(user.id, _profile);
+      debugPrint('[AuthProvider] Mapped role → ${_currentUser!.role.name} '
+          '| isAdmin: ${_currentUser!.role == UserRole.admin}');
       _hasShownUpgradePrompt =
           _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
       _hasShownVerifyWarning = false;
       _errorMessage = null;
-      // NOTE: fetch user role from users/profiles table here and save to
-      // SharedPreferences as current_user_role so screens can gate features
-      // without re-fetching every time.  The role is already in _profile
-      // (key: 'role'); persist it like:
-      //   prefs.setString('current_user_role', _profile?['role'] ?? 'registered_user');
       onAuthLoginSuccess?.call();
     } on AuthException catch (e) {
       _isAuthenticated = false;
