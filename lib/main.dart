@@ -110,30 +110,9 @@ void main() async {
     reportProvider.init();
   };
 
-  // Bootstrap public data (no auth required).
-  await alertProvider.init();
-  hazardZoneProvider.init();
-
-  if (authProvider.isAuthenticated) {
-    final user = authProvider.currentUser;
-    await reportProvider.init(
-      isAdmin: authProvider.isAdmin,
-      uid: user?.id,
-    );
-  }
-
-  // FCM push notifications.
-  try {
-    await NotificationService.instance.init();
-    debugPrint('[EcoAlert] Notification service initialized');
-    final uid = authProvider.currentUser?.id;
-    if (uid != null) {
-      NotificationService.instance.saveFcmToken(uid).catchError((_) {});
-    }
-  } catch (e) {
-    debugPrint('[EcoAlert] FCM init failed: $e');
-  }
-
+  // Launch the UI immediately — don't block on network calls.
+  // The splash animates for 3.5 s which is enough time for the
+  // background inits below to complete on any reasonable connection.
   runApp(EcoAlertApp(
     themeProvider: themeProvider,
     authProvider: authProvider,
@@ -141,6 +120,28 @@ void main() async {
     reportProvider: reportProvider,
     hazardZoneProvider: hazardZoneProvider,
   ));
+
+  // Bootstrap network data after runApp (fire-and-forget).
+  alertProvider.init().catchError((_) {});
+  hazardZoneProvider.init();
+
+  if (authProvider.isAuthenticated) {
+    final user = authProvider.currentUser;
+    reportProvider
+        .init(isAdmin: authProvider.isAdmin, uid: user?.id)
+        .catchError((_) {});
+  }
+
+  // FCM — non-blocking; failures are logged only.
+  NotificationService.instance.init().then((_) {
+    debugPrint('[EcoAlert] Notification service initialized');
+    final uid = authProvider.currentUser?.id;
+    if (uid != null) {
+      NotificationService.instance.saveFcmToken(uid).catchError((_) {});
+    }
+  }).catchError((e) {
+    debugPrint('[EcoAlert] FCM init failed: $e');
+  });
 }
 
 class EcoAlertApp extends StatelessWidget {

@@ -2,12 +2,8 @@ import 'package:ecoalert/widgets/mountain_logo.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-// ADD local_auth to pubspec.yaml, then uncomment:
-// [local_auth] import 'package:local_auth/local_auth.dart';
 
 import '../config/app_colors.dart';
-import '../config/app_text_styles.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/ea_field.dart';
 import '../widgets/sso_button.dart';
@@ -51,62 +47,31 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  bool _navigated = false;
+
   void _onAuthStateChanged() {
     if (!mounted) return;
     final auth = _authProvider;
     if (auth == null || !auth.isAuthenticated) return;
+    // Guard against double-fire: AuthProvider can notify twice during login
+    // (once when session resolves, once when profile finishes loading).
+    // Only navigate on the call where the profile/role is already set.
+    if (auth.currentUser == null) return;
+    if (_navigated) return;
+    _navigated = true;
     _handlePostLoginNavigation(auth);
   }
 
-  Future<void> _handlePostLoginNavigation(AuthProvider auth) async {
+  void _handlePostLoginNavigation(AuthProvider auth) {
+    if (!mounted) return;
     if (auth.isAdmin) {
-      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/admin');
       return;
     }
-    // Biometric offer unwired — navigate directly.
-    // Re-enable by restoring: await _maybeOfferBiometric();
-    if (!mounted) return;
     if (widget.onSuccess != null) {
       widget.onSuccess!.call();
     } else {
       Navigator.pushReplacementNamed(context, '/navigation');
-    }
-  }
-
-  /// Checks whether the device supports biometrics and, if the preference
-  /// hasn't been set yet, shows a dialog asking the user to enable it.
-  Future<void> _maybeOfferBiometric() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      // Already decided — don't ask again.
-      if (prefs.containsKey('biometric_enabled')) return;
-
-      // ── Uncomment once local_auth is in pubspec.yaml ──────────────────
-      // [local_auth] final localAuth = LocalAuthentication();
-      // [local_auth] final canUse = await localAuth.canCheckBiometrics ||
-      // [local_auth]               await localAuth.isDeviceSupported();
-      // [local_auth] if (!canUse || !mounted) return;
-      // ──────────────────────────────────────────────────────────────────
-
-      // Placeholder: show dialog on any device until local_auth is wired up.
-      // Remove this `if (!mounted) return;` line once the block above is on.
-      if (!mounted) return;
-
-      final result = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const _BiometricSetupDialog(),
-      );
-
-      if (result == 'yes') {
-        await prefs.setBool('biometric_enabled', true);
-      } else if (result == 'no') {
-        await prefs.setBool('biometric_enabled', false);
-      }
-      // 'later' or dismissed → don't save; prompt again on next login.
-    } catch (_) {
-      // Never block login because of a biometric setup error.
     }
   }
 
@@ -504,58 +469,6 @@ class _DividerLabel extends StatelessWidget {
 }
 
 
-// ── Biometric setup dialog ────────────────────────────────────────────────────
-
-class _BiometricSetupDialog extends StatelessWidget {
-  const _BiometricSetupDialog();
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.bgCard,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      icon: const Icon(Icons.fingerprint, color: AppColors.primary, size: 44),
-      title: Text(
-        'Enable Fingerprint Login?',
-        style: AppTextStyles.titleLarge.copyWith(
-          color: AppColors.textPrimary,
-          fontWeight: FontWeight.w700,
-        ),
-        textAlign: TextAlign.center,
-      ),
-      content: Text(
-        'Use fingerprint or Face ID for faster, secure access next time.',
-        style: AppTextStyles.body.copyWith(
-          color: AppColors.textSecondary,
-          height: 1.5,
-        ),
-        textAlign: TextAlign.center,
-      ),
-      actionsAlignment: MainAxisAlignment.spaceEvenly,
-      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, 'no'),
-          child: Text('No Thanks',
-              style: TextStyle(color: AppColors.textSecondary)),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context, 'later'),
-          child: Text('Ask Later',
-              style: TextStyle(color: AppColors.textSecondary)),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context, 'yes'),
-          child: Text(
-            'Yes',
-            style: TextStyle(
-                color: AppColors.primary, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 // ignore: unused_element
 class _TinyDot extends StatelessWidget {
