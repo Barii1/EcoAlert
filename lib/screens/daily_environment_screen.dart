@@ -7,7 +7,7 @@ import '../providers/flood_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/weather_provider.dart';
 import '../services/daily_brief_service.dart';
-import '../widgets/app_background.dart';
+import '../config/app_colors.dart' show AppColors;
 
 class DailyEnvironmentScreen extends StatefulWidget {
   const DailyEnvironmentScreen({super.key, this.initialBrief});
@@ -32,7 +32,10 @@ class _DailyEnvironmentScreenState extends State<DailyEnvironmentScreen> {
   void initState() {
     super.initState();
     _brief = widget.initialBrief;
-    if (_brief == null) _fetchBrief();
+    // Use addPostFrameCallback so context.read<>() is safe
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_brief == null && mounted) _fetchBrief();
+    });
   }
 
   @override
@@ -134,9 +137,8 @@ class _DailyEnvironmentScreenState extends State<DailyEnvironmentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: AppBackground(
-        child: SafeArea(
+      backgroundColor: AppColors.bgPrimary,
+      body: SafeArea(
           child: Column(
             children: [
               _buildHeader(),
@@ -165,7 +167,6 @@ class _DailyEnvironmentScreenState extends State<DailyEnvironmentScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
