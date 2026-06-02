@@ -42,9 +42,15 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      context.read<LocationProvider>().getCurrentLocation();
+      final loc = context.read<LocationProvider>();
+      await loc.getCurrentLocation();
+      if (!mounted) return;
+      final pos = loc.currentPosition;
+      if (pos != null) {
+        _mapController.move(LatLng(pos.latitude, pos.longitude), 13);
+      }
     });
   }
 
@@ -592,18 +598,8 @@ class _MapScreenState extends State<MapScreen> {
                       const Spacer(),
                       AppCard(
                         padding: EdgeInsets.zero,
-                        onTap: () {
-                          _mapController.move(_lahore, 11);
-                          setState(() {});
-                        },
-                        child: const Icon(Icons.refresh,
-                            color: AppColors.primary, size: 24),
-                      ),
-                      const SizedBox(width: 8),
-                      AppCard(
-                        padding: EdgeInsets.zero,
                         onTap: _goToUserLocation,
-                        child: const Icon(Icons.my_location,
+                        child: const Icon(Icons.my_location_rounded,
                             color: AppColors.primary, size: 24),
                       ),
                       const SizedBox(width: 8),

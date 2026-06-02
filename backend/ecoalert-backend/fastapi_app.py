@@ -141,6 +141,7 @@ class DailySummaryRequest(BaseModel):
     temperature: Optional[float]       = None
     humidity: Optional[float]          = None
     weather_desc: Optional[str]        = None
+    health_conditions: List[str]       = []
 
 
 class ChatMessage(BaseModel):
@@ -158,11 +159,12 @@ class ChatRequest(BaseModel):
     temperature: Optional[float] = None
     weather_desc: Optional[str]  = None
     history: List[ChatMessage]   = []
+    health_conditions: List[str] = []
 
 
 def _build_context(city: str, aqi, aqi_category, flood_risk,
                    flood_probability, cloudburst_risk, temperature,
-                   humidity, weather_desc) -> str:
+                   humidity, weather_desc, health_conditions=None) -> str:
     parts = [f"Location: {city}, Pakistan"]
     if aqi is not None:
         parts.append(f"Current AQI: {aqi} ({aqi_category or 'unknown'})")
@@ -177,7 +179,37 @@ def _build_context(city: str, aqi, aqi_category, flood_risk,
         parts.append(f"Humidity: {humidity:.0f}%")
     if weather_desc:
         parts.append(f"Weather: {weather_desc}")
+    if health_conditions:
+        parts.append(f"User health conditions: {', '.join(health_conditions)}")
     return "\n".join(parts)
+
+
+def _health_persona(health_conditions: List[str]) -> str:
+    """Returns a personalisation clause for the AI system prompt."""
+    if not health_conditions:
+        return ""
+    cond_str = ", ".join(health_conditions)
+    notes = []
+    lc = [c.lower() for c in health_conditions]
+    if any("asthma" in c or "copd" in c for c in lc):
+        notes.append("respiratory conditions (flag AQI above 50 as a personal risk)")
+    if any("heart" in c or "hypertension" in c for c in lc):
+        notes.append("cardiovascular conditions (heat and air pollution are extra dangerous)")
+    if any("diabetes" in c for c in lc):
+        notes.append("diabetes (dehydration and heat stress require extra caution)")
+    if any("elderly" in c for c in lc):
+        notes.append("elderly household member (lower thresholds for all hazards)")
+    if any("child" in c for c in lc):
+        notes.append("children (sensitive to AQI and heat; keep indoors if AQI > 100)")
+    if any("allerg" in c for c in lc):
+        notes.append("allergies (pollen and smog can trigger reactions)")
+    if not notes:
+        notes.append(f"{cond_str} (adjust advice accordingly)")
+    return (
+        f" The user has the following health conditions: {cond_str}. "
+        f"Personalise every response for these: {'; '.join(notes)}. "
+        "Always mention the specific condition by name when giving relevant advice."
+    )
 
 
 def _call_openai(system: str, messages: list, max_tokens: int = 400) -> str:
@@ -213,25 +245,46 @@ def daily_summary(payload: DailySummaryRequest):
         payload.flood_risk, payload.flood_probability,
         payload.cloudburst_risk, payload.temperature,
         payload.humidity, payload.weather_desc,
+        payload.health_conditions,
     )
+    persona = _health_persona(payload.health_conditions)
     system = (
-        "You are EcoAlert, a friendly environmental safety assistant for Pakistan. "
-        "Write in simple English. Be concise, warm, and practical. "
+        "You are EcoAlert, a friendly environmental safety assistant for Pakistan."
+        + persona +
+        " Write in simple English. Be concise, warm, and practical. "
         "Never use markdown symbols like ** or ##. Use plain sentences only."
     )
+    has_conditions = bool(payload.health_conditions)
     summary_prompt = (
         f"Current conditions:\n{ctx}\n\n"
-        "Write a 2-3 sentence daily environmental brief for this city. "
-        "Start with the most important hazard. Be specific and actionable."
+        + (
+            f"The user has: {', '.join(payload.health_conditions)}. "
+            "Write a 2-3 sentence daily brief that directly addresses how today's conditions "
+            "affect their specific health profile. Name the condition explicitly."
+            if has_conditions else
+            "Write a 2-3 sentence daily environmental brief for this city. "
+            "Start with the most important hazard. Be specific and actionable."
+        )
     )
     tip_prompt = (
         f"Current conditions:\n{ctx}\n\n"
-        "Give ONE specific safety tip for today in one sentence. "
-        "Start with an action verb. No generic advice."
+        + (
+            f"The user has: {', '.join(payload.health_conditions)}. "
+            "Give ONE safety tip specifically for their health condition today. "
+            "Name the condition. Start with an action verb. One sentence only."
+            if has_conditions else
+            "Give ONE specific safety tip for today in one sentence. "
+            "Start with an action verb. No generic advice."
+        )
     )
     guide_prompt = (
         f"Current conditions:\n{ctx}\n\n"
-        "Based on the dominant hazard today, give a dynamic safety guide. "
+        + (
+            f"The user has: {', '.join(payload.health_conditions)}. "
+            "Give a personalised safety guide for their conditions under today's hazards. "
+            if has_conditions else
+            "Based on the dominant hazard today, give a dynamic safety guide. "
+        ) +
         "Respond with exactly this format:\n"
         "TITLE: <3-6 word title>\n"
         "STEP1: <action>\nSTEP2: <action>\nSTEP3: <action>\nSTEP4: <action>"
@@ -269,12 +322,16 @@ def ai_chat(payload: ChatRequest):
         payload.city, payload.aqi, payload.aqi_category,
         payload.flood_risk, None, payload.cloudburst_risk,
         payload.temperature, None, payload.weather_desc,
+        payload.health_conditions,
     )
+    persona = _health_persona(payload.health_conditions)
     system = (
-        "You are EcoAlert, a helpful environmental safety assistant for Pakistan. "
-        f"The user is in {payload.city}. Current conditions:\n{ctx}\n\n"
+        "You are EcoAlert, a helpful environmental safety assistant for Pakistan."
+        + persona +
+        f" The user is in {payload.city}. Current conditions:\n{ctx}\n\n"
         "Answer questions about air quality, floods, cloudbursts, weather, and safety. "
-        "Be concise (2-4 sentences max). Give specific, actionable advice. "
+        "Be concise (2-4 sentences max). Give specific, actionable advice personalised "
+        "to the user's health profile when relevant. "
         "Never use markdown symbols. If asked something unrelated to environment or safety, "
         "politely redirect to your purpose."
     )

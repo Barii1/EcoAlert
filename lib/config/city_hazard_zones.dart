@@ -7,6 +7,63 @@ import '../models/flood_model.dart';
 class CityHazardZones {
   CityHazardZones._();
 
+  /// Safe assembly points per city: high-ground areas outside flood zones.
+  /// (lat, lon, name)
+  /// Safe assembly points — these must NOT overlap with any hazard zone.
+  /// Chosen for elevation, infrastructure and emergency service access.
+  static const _safePoints = {
+    'lahore': [
+      (31.5205, 74.3252, 'Services Hospital Emergency (Safe Zone)'),
+      (31.5120, 74.3490, 'Jinnah Hospital (Safe Zone)'),
+      (31.5540, 74.3290, 'Lawrence Gardens / Bagh-e-Jinnah (Safe Zone)'),
+      (31.5310, 74.3820, 'DHA Phase 5 Elevated Area (Safe Zone)'),
+      (31.5520, 74.3700, 'Cantt Railway Station (Safe Zone)'),
+    ],
+    'karachi': [
+      (24.8745, 67.0680, 'Jinnah Hospital Karachi (Safe Zone)'),
+      (24.8136, 67.0328, 'DHA Phase 6 (Safe Zone)'),
+      (24.8920, 67.0770, 'Gulshan-e-Iqbal Higher Ground (Safe Zone)'),
+    ],
+    'islamabad': [
+      (33.7180, 73.0700, 'F-7 Markaz (Safe Zone)'),
+      (33.7294, 73.0500, 'PIMS Hospital (Safe Zone)'),
+      (33.6700, 73.0900, 'DHA Islamabad (Safe Zone)'),
+    ],
+    'peshawar': [
+      (33.9970, 71.4660, 'Hayatabad Medical Complex (Safe Zone)'),
+      (34.0250, 71.4980, 'University Town (Safe Zone)'),
+    ],
+  };
+
+  /// Returns the nearest safe assembly point to [userLat]/[userLng] for [city].
+  /// Falls back to city center label if no point found.
+  static String nearestSafeDestination(
+    String city,
+    double userLat,
+    double userLng,
+  ) {
+    final points = _safePoints[city.toLowerCase()] ??
+        _safePoints['lahore']!;
+    if (points.isEmpty) return '$city Safe Zone';
+
+    var best = points.first;
+    var bestDist = _dist(userLat, userLng, best.$1, best.$2);
+    for (final p in points.skip(1)) {
+      final d = _dist(userLat, userLng, p.$1, p.$2);
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+      }
+    }
+    return best.$3;
+  }
+
+  static double _dist(double lat1, double lng1, double lat2, double lng2) {
+    final dlat = lat2 - lat1;
+    final dlng = lng2 - lng1;
+    return math.sqrt(dlat * dlat + dlng * dlng);
+  }
+
   static const lahore = [
     (31.5700, 74.2850, 950.0, 'Ravi River Corridor', 'flood'),
     (31.5880, 74.3110, 850.0, 'Shahdara Township', 'flood'),

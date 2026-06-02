@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
+import '../config/app_config.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
-import 'alerts_screen.dart' show AlertItem;
+import '../config/city_hazard_zones.dart';
 import '../providers/alert_provider.dart';
+import '../providers/location_provider.dart';
 import '../models/alert_model.dart';
+import 'alerts_screen.dart' show AlertItem;
+import 'route_info_screen.dart' show RouteInfoArgs;
 
 class AlertDetailScreen extends StatelessWidget {
   const AlertDetailScreen({super.key});
@@ -172,7 +176,29 @@ class _AlertCard extends StatelessWidget {
                 _PrimaryButton(
                   label: 'View Safe Routes',
                   icon: Icons.map,
-                  onPressed: () => Navigator.pushNamed(context, '/route-info'),
+                  onPressed: () {
+                    final loc = context.read<LocationProvider>();
+                    final pos = loc.currentPosition;
+                    final city = loc.currentCity.isNotEmpty
+                        ? loc.currentCity
+                        : AppConfig.defaultCity;
+                    final area = loc.currentArea;
+                    final origin = area.isNotEmpty
+                        ? 'Near $area'
+                        : (city.isNotEmpty ? 'Near $city' : 'Current location');
+                    final destination = pos != null
+                        ? CityHazardZones.nearestSafeDestination(
+                            city, pos.latitude, pos.longitude)
+                        : CityHazardZones.nearestSafeDestination(city, 0, 0);
+                    Navigator.pushNamed(
+                      context,
+                      '/route-info',
+                      arguments: RouteInfoArgs(
+                        origin: origin,
+                        destination: destination,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 _GhostButton(

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
 import '../providers/aqi_provider.dart';
+import '../providers/auth_provider.dart';
 import '../providers/flood_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/weather_provider.dart';
@@ -24,7 +25,6 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
   @override
   void initState() {
     super.initState();
-    // Delay slightly so providers have loaded their data first
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(seconds: 3), _fetch);
     });
@@ -38,6 +38,7 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
       final flood = context.read<FloodProvider>();
       final loc   = context.read<LocationProvider>();
       final wx    = context.read<WeatherProvider>();
+      final auth  = context.read<AuthProvider>();
       final city  = loc.currentCity.isNotEmpty ? loc.currentCity : 'Lahore';
 
       final brief = await DailyBriefService.instance.fetchSummary(
@@ -49,6 +50,7 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
         temperature:      wx.current?.temperature,
         humidity:         wx.current?.humidity.toDouble(),
         weatherDesc:      wx.current?.description,
+        healthConditions: auth.currentUser?.healthConditions ?? [],
       );
       if (mounted) setState(() { _brief = brief; _loading = false; _fetched = true; });
     } catch (_) {
@@ -71,10 +73,7 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              AppColors.primary.withOpacity(0.12),
-              AppColors.bgCard,
-            ],
+            colors: [AppColors.primary.withOpacity(0.12), AppColors.bgCard],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -84,7 +83,7 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row
+            // Header
             Row(
               children: [
                 Container(
@@ -106,9 +105,7 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
                               color: AppColors.textPrimary)),
                       Consumer<LocationProvider>(
                         builder: (_, loc, __) => Text(
-                          loc.currentCity.isNotEmpty
-                              ? loc.currentCity
-                              : 'Your Location',
+                          loc.currentCity.isNotEmpty ? loc.currentCity : 'Your Location',
                           style: AppTextStyles.bodySmall.copyWith(
                               color: AppColors.textSecondary),
                         ),
@@ -116,7 +113,6 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
                     ],
                   ),
                 ),
-                // Tap indicator
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
@@ -140,7 +136,14 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
 
             const SizedBox(height: 12),
 
-            // Content area
+            // Live data chips — always visible, no waiting
+            _buildLiveChips(),
+
+            const SizedBox(height: 12),
+            const Divider(color: AppColors.borderSubtle, height: 1),
+            const SizedBox(height: 10),
+
+            // AI brief content
             if (_loading)
               _shimmer()
             else if (_brief != null)
@@ -155,9 +158,93 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
     );
   }
 
+  Widget _buildLiveChips() {
+    return Consumer3<AqiProvider, WeatherProvider, FloodProvider>(
+      builder: (_, aqi, wx, flood, __) {
+        final aqiReading = aqi.current;
+        final weather    = wx.current;
+        final risk       = flood.risk;
+
+        return Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            if (aqiReading != null)
+              _chip(
+                icon: Icons.air_rounded,
+                color: aqiReading.color,
+                label: 'AQI ${aqiReading.aqi}',
+                sub: aqiReading.categoryLabel,
+              ),
+            if (weather != null) ...[
+              _chip(
+                icon: Icons.thermostat_rounded,
+                color: const Color(0xFF42A5F5),
+                label: '${weather.temperature.round()}°C',
+                sub: weather.description,
+              ),
+              _chip(
+                icon: Icons.water_drop_outlined,
+                color: const Color(0xFF80DEEA),
+                label: '${weather.humidity}%',
+                sub: 'Humidity',
+              ),
+              _chip(
+                icon: Icons.air_outlined,
+                color: AppColors.textSecondary,
+                label: '${weather.windSpeed.round()} km/h',
+                sub: weather.windDirectionLabel,
+              ),
+            ],
+            if (risk != null)
+              _chip(
+                icon: Icons.water_rounded,
+                color: risk.color,
+                label: risk.levelLabel,
+                sub: '${risk.riskScore}% risk',
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _chip({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String sub,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 5),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: AppTextStyles.bodySmall.copyWith(
+                      color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+              Text(sub,
+                  style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary, fontSize: 9)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _preview(String summary, String tip) {
-    // Show first 2 lines of summary only
-    final preview = summary.length > 140 ? '${summary.substring(0, 140)}…' : summary;
+    final preview = summary.length > 120 ? '${summary.substring(0, 120)}…' : summary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -167,32 +254,32 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis),
         if (tip.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(Icons.tips_and_updates_outlined,
-                  color: AppColors.warning, size: 13),
+                  color: AppColors.warning, size: 12),
               const SizedBox(width: 5),
               Expanded(
                 child: Text(tip,
                     style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.warning, fontSize: 11),
+                        color: AppColors.warning, fontSize: 10),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           children: [
             const Icon(Icons.chat_bubble_outline_rounded,
-                color: AppColors.primary, size: 13),
+                color: AppColors.primary, size: 12),
             const SizedBox(width: 5),
             Text('Ask the AI about today\'s conditions',
                 style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.primary, fontSize: 11)),
+                    color: AppColors.primary, fontSize: 10)),
           ],
         ),
       ],
@@ -206,8 +293,6 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
         _shimmerLine(0.9),
         const SizedBox(height: 6),
         _shimmerLine(0.7),
-        const SizedBox(height: 6),
-        _shimmerLine(0.5),
       ],
     );
   }
@@ -226,12 +311,11 @@ class _DailyBriefWidgetState extends State<DailyBriefWidget> {
   Widget _fallback() {
     return Row(
       children: [
-        const Icon(Icons.touch_app_outlined,
-            color: AppColors.textSecondary, size: 14),
+        const Icon(Icons.chat_bubble_outline_rounded,
+            color: AppColors.primary, size: 13),
         const SizedBox(width: 6),
-        Text('Tap to open your daily environmental brief',
-            style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.textSecondary)),
+        Text('Tap to open full report & AI chat',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary)),
       ],
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_tables.dart';
@@ -33,6 +34,7 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   bool _hasShownUpgradePrompt = false;
+  bool _hasShownHealthPrompt = false;
   StreamSubscription<AuthState>? _authStateSubscription;
 
   AuthProvider({
@@ -76,6 +78,7 @@ class AuthProvider extends ChangeNotifier {
       _hasShownVerifyWarning = false;
       _isLoading = false;
       _errorMessage = null;
+      await _loadHealthPromptFlag();
       notifyListeners();
       onAuthLoginSuccess?.call();
     } else if (state.event == AuthChangeEvent.signedOut && _isAuthenticated) {
@@ -96,6 +99,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isBasic => currentRole == UserRole.registered;
 
   bool get hasShownUpgradePrompt => _hasShownUpgradePrompt;
+  bool get hasShownHealthPrompt => _hasShownHealthPrompt;
 
   bool get shouldShowPlanPrompt {
     if (_currentUser == null) return false;
@@ -107,8 +111,31 @@ class AuthProvider extends ChangeNotifier {
       true;
   }
 
+  bool get shouldShowHealthPrompt {
+    if (_currentUser == null) return false;
+    if (_hasShownHealthPrompt) return false;
+    return true;
+  }
+
   void markUpgradePromptShown() {
     _hasShownUpgradePrompt = true;
+  }
+
+  Future<void> markHealthPromptSeen() async {
+    _hasShownHealthPrompt = true;
+    final uid = _currentUser?.id;
+    if (uid != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('health_prompt_seen_$uid', true);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _loadHealthPromptFlag() async {
+    final uid = _currentUser?.id;
+    if (uid == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    _hasShownHealthPrompt = prefs.getBool('health_prompt_seen_$uid') ?? false;
   }
 
   Future<void> markPlanPromptSeen() async {
@@ -197,6 +224,7 @@ class AuthProvider extends ChangeNotifier {
     _currentUser = null;
     _isAuthenticated = false;
     _hasShownUpgradePrompt = false;
+    _hasShownHealthPrompt = false;
     _isEmailVerified = true;
     _hasShownVerifyWarning = false;
   }
@@ -218,6 +246,7 @@ class AuthProvider extends ChangeNotifier {
       _profile = null;
     }
     _currentUser = _profileToUserModel(user.id, _profile);
+    await _loadHealthPromptFlag();
     notifyListeners();
   }
 
@@ -268,6 +297,7 @@ class AuthProvider extends ChangeNotifier {
           _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
       _hasShownVerifyWarning = false;
       _errorMessage = null;
+      await _loadHealthPromptFlag();
       onAuthLoginSuccess?.call();
     } on AuthException catch (e) {
       _isAuthenticated = false;
