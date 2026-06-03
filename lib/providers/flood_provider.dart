@@ -5,13 +5,11 @@ import '../config/app_config.dart';
 import '../models/flood_model.dart';
 import '../services/notification_service.dart';
 import '../services/open_meteo_rainfall_source.dart';
-import '../services/openweather_weather_source.dart';
 import '../services/flood_risk_calculator.dart';
 import '../services/remote_predict_service.dart';
 import '../services/cache_service.dart';
 
 class FloodProvider extends ChangeNotifier {
-  final OpenWeatherSource _openWeather = OpenWeatherSource();
   final OpenMeteoRainfallSource _openMeteoRain = OpenMeteoRainfallSource();
   final FloodRiskCalculator _localCalculator = FloodRiskCalculator();
 
@@ -111,18 +109,33 @@ class FloodProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    // ── Step 1: Fetch rainfall data from OpenWeatherMap ──────
+    // ── Step 1: Fetch rainfall data from Open-Meteo ──────
     try {
       RainfallData rainfall;
       try {
-        rainfall = await _openWeather.fetchRainfall(city);
-      } catch (owmError) {
+        if (latitude != null && longitude != null) {
+          rainfall = await _openMeteoRain.fetchRainfallAt(
+            city: city,
+            latitude: latitude,
+            longitude: longitude,
+          );
+        } else {
+          rainfall = await _openMeteoRain.fetchRainfall(city);
+        }
+      } catch (rainError) {
         debugPrint(
-            '[FloodProvider] OpenWeather failed, using Open-Meteo: $owmError');
-        rainfall = await _openMeteoRain.fetchRainfall(city);
+            '[FloodProvider] Open-Meteo rainfall failed, using zero-rain fallback: $rainError');
+        rainfall = RainfallData(
+          mm24h: 0,
+          mm48h: 0,
+          mmPerHour: 0,
+          timestamp: DateTime.now(),
+        );
       }
 
       // ── Step 2: Try the real ML model via Flask ───────────────────────
+      rainfall = _preserveRecentRainfallIfRefreshDropsToZero(rainfall);
+
       FloodRisk result;
       try {
         if (latitude != null && longitude != null) {
@@ -190,6 +203,39 @@ class FloodProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  RainfallData _preserveRecentRainfallIfRefreshDropsToZero(
+    RainfallData latest,
+  ) {
+    final previous = _risk?.rainfall;
+    if (previous == null) return latest;
+
+    final latestIsZero =
+        latest.mm24h <= 0 && latest.mm48h <= 0 && latest.mmPerHour <= 0;
+    final previousHasRain =
+        previous.mm24h > 0 || previous.mm48h > 0 || previous.mmPerHour > 0;
+    final previousIsRecent =
+        DateTime.now().difference(previous.timestamp).inHours < 3;
+
+    if (!latestIsZero || !previousHasRain || !previousIsRecent) {
+      return latest;
+    }
+
+    debugPrint(
+      '[FloodProvider] Preserving recent nonzero rainfall after zero refresh: '
+      '24h=${previous.mm24h}, 48h=${previous.mm48h}, intensity=${previous.mmPerHour}',
+    );
+
+    return RainfallData(
+      mm24h: previous.mm24h,
+      mm48h: previous.mm48h,
+      mmPerHour: previous.mmPerHour,
+      temperature:
+          latest.temperature != 0 ? latest.temperature : previous.temperature,
+      humidity: latest.humidity != 0 ? latest.humidity : previous.humidity,
+      timestamp: DateTime.now(),
+    );
   }
 
   void _startRefreshTimer() {

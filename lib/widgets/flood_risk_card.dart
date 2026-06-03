@@ -128,11 +128,12 @@ class FloodRiskCard extends StatelessWidget {
                   const SizedBox(height: AppSpacing.p12),
                   Row(
                     children: [
-                      Icon(Icons.grain, size: 16, color: AppColors.textSecondary),
+                      Icon(Icons.grain,
+                          size: 16, color: AppColors.textSecondary),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${risk.rainfall.mm24h.toStringAsFixed(0)}mm rain today',
+                          '${_formatRain(risk.rainfall.mm24h)} rain today',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: AppColors.textSecondary,
                           ),
@@ -167,5 +168,11 @@ class FloodRiskCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatRain(double value) {
+    if (value == 0) return '0 mm';
+    if (value < 10) return '${value.toStringAsFixed(1)} mm';
+    return '${value.round()} mm';
   }
 }

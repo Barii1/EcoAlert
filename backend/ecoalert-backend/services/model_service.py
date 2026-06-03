@@ -79,16 +79,32 @@ AQI_CLASS_TO_VALUE = {
     5: 250,
 }
 
-# ── Open-Meteo forecast endpoint (free, no key) ───────────────────────────
+# ── Open-Meteo endpoints (free, no key) ───────────────────────────────────
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 OPEN_METEO_HOURLY_VARS = [
     "temperature_2m",
     "relative_humidity_2m",
     "dew_point_2m",
+    "precipitation",
+    "rain",
     "pressure_msl",
     "cloud_cover",
     "wind_speed_100m",
+    "apparent_temperature",
+    "weather_code",
+    "surface_pressure",
+]
+
+OPEN_METEO_DAILY_VARS = [
+    "weather_code",
+    "precipitation_sum",
+    "rain_sum",
+    "precipitation_hours",
+    "temperature_2m_mean",
+    "temperature_2m_max",
+    "temperature_2m_min",
 ]
 
 AQI_OPEN_METEO_CURRENT_VARS = [
@@ -263,16 +279,20 @@ class ModelService:
     # ─────────────────────────────────────────────────────────────────────
 
     def _fetch_open_meteo_features(self, latitude: float, longitude: float) -> dict:
-        """Fetches today's hourly forecast and aggregates to daily features."""
-        today = datetime.utcnow().date()
-        tomorrow = today + timedelta(days=1)
+        """Fetch recent archived hourly Open-Meteo data and aggregate features."""
+        # Archive data is more stable for model inputs than live forecast rows.
+        # Use the most recent complete archive day, with a two-week window so the
+        # API shape matches the refined cloudburst query used in project testing.
+        end_date = datetime.utcnow().date() - timedelta(days=1)
+        start_date = end_date - timedelta(days=14)
 
         params = {
             "latitude":      latitude,
             "longitude":     longitude,
             "hourly":        ",".join(OPEN_METEO_HOURLY_VARS),
-            "start_date":    today.isoformat(),
-            "end_date":      tomorrow.isoformat(),
+            "daily":         ",".join(OPEN_METEO_DAILY_VARS),
+            "start_date":    start_date.isoformat(),
+            "end_date":      end_date.isoformat(),
             "timezone":      "auto",
             "wind_speed_unit": "kmh",
         }
@@ -280,7 +300,7 @@ class ModelService:
         last_error = None
         for _ in range(2):
             try:
-                resp = requests.get(OPEN_METEO_FORECAST_URL, params=params, timeout=15)
+                resp = requests.get(OPEN_METEO_ARCHIVE_URL, params=params, timeout=15)
                 resp.raise_for_status()
                 break
             except requests.RequestException as exc:
@@ -336,7 +356,12 @@ class ModelService:
             "dew_point":   round(dew_point, 3),
         }
 
-        logger.info("[ModelService] Open-Meteo features: %s", features)
+        logger.info(
+            "[ModelService] Open-Meteo archive features (%s to %s): %s",
+            start_date,
+            end_date,
+            features,
+        )
         return features
 
     # ─────────────────────────────────────────────────────────────────────

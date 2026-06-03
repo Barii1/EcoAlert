@@ -229,7 +229,7 @@ class WeatherForecastWidget extends StatelessWidget {
                   ),
                   const SizedBox(width: AppSpacing.p4),
                   Text(
-                    '$rainProbability%',
+                    '$rainProbability% chance',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textSecondary,
                     ),

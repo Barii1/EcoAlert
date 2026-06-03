@@ -2,20 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
 
 import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
-import '../providers/auth_provider.dart';
 import '../services/aqi_image_service.dart';
 
 class AqiImageClassifyScreen extends StatefulWidget {
   const AqiImageClassifyScreen({super.key});
 
   @override
-  State<AqiImageClassifyScreen> createState() =>
-      _AqiImageClassifyScreenState();
+  State<AqiImageClassifyScreen> createState() => _AqiImageClassifyScreenState();
 }
 
 class _AqiImageClassifyScreenState extends State<AqiImageClassifyScreen> {
@@ -25,21 +22,6 @@ class _AqiImageClassifyScreenState extends State<AqiImageClassifyScreen> {
   bool _loading = false;
   AqiImagePrediction? _result;
   String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!context.read<AuthProvider>().isAdmin) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Admin access required'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ));
-      }
-    });
-  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -593,8 +575,7 @@ class _ResultCard extends StatelessWidget {
                               child: LinearProgressIndicator(
                                 value: score.confidence,
                                 backgroundColor: AppColors.bgElevated,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(c),
+                                valueColor: AlwaysStoppedAnimation<Color>(c),
                                 minHeight: 4,
                               ),
                             ),
@@ -603,8 +584,7 @@ class _ResultCard extends StatelessWidget {
                       ),
                     ),
                     if (!isLast)
-                      Container(
-                          height: 0.5, color: AppColors.borderSubtle),
+                      Container(height: 0.5, color: AppColors.borderSubtle),
                   ],
                 );
               }).toList(),

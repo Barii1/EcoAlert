@@ -198,8 +198,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             builder: (context, flood, _) {
                               return _buildMapPreviewCard(
                                 context,
-                                aqiValue: aqi.current?.aqi,
-                                floodPercent: flood.risk?.riskScore,
+                                aqiValue: aqi.current?.predictedAqi ??
+                                    aqi.current?.aqi,
+                                floodPercent:
+                                    flood.risk?.cloudburstProbability != null
+                                        ? (flood.risk!.cloudburstProbability! *
+                                                100)
+                                            .round()
+                                        : flood.risk?.riskScore,
                               );
                             },
                           );
@@ -549,7 +555,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Consumer<AlertProvider>(
                 builder: (context, alertProvider, _) {
-                  if (alertProvider.alerts.isEmpty) {
+                  final city = context.read<AuthProvider>().currentUser?.city;
+                  if (_localAlerts(alertProvider.alerts, city).isEmpty) {
                     return const SizedBox.shrink();
                   }
                   return InkWell(
@@ -584,7 +591,9 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
 
-            final alerts = alertProvider.alerts.take(3).toList();
+            final city = context.read<AuthProvider>().currentUser?.city;
+            final alerts =
+                _localAlerts(alertProvider.alerts, city).take(3).toList();
             if (alerts.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -659,60 +668,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ─────────────────── QUICK ACTIONS ───────────────────
   Widget _buildQuickActions(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.p16),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 170,
-            child: _QuickActionCard(
-              icon: Icons.camera_alt_rounded,
-              label: 'Scan & Report',
-              sublabel: 'Report a hazard',
-              color: AppColors.primary,
-              onTap: () => Navigator.pushNamed(context, '/aqi-scan'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 170,
-            child: _QuickActionCard(
-              icon: Icons.image_search_rounded,
-              label: 'AQI Image Scan',
-              sublabel: 'ML air quality scan',
-              color: AppColors.info,
-              onTap: () {
-                final isAdmin = context.read<AuthProvider>().isAdmin;
-                if (!isAdmin) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content:
-                        Text('AQI Image Scan is available for admins only'),
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                  return;
-                }
-                Navigator.pushNamed(context, '/aqi-image-classify');
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 170,
-            child: _QuickActionCard(
-              icon: Icons.map_rounded,
-              label: 'Hazard Map',
-              sublabel: 'View live map',
-              color: AppColors.success,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MapScreen()),
-              ),
-            ),
-          ),
-        ],
+      child: _QuickActionCard(
+        icon: Icons.image_search_rounded,
+        label: 'Scan',
+        sublabel: 'Classify air quality with the image ML model',
+        color: AppColors.primary,
+        onTap: () => Navigator.pushNamed(context, '/aqi-image-classify'),
       ),
     );
+  }
+
+  List<AlertModel> _localAlerts(List<AlertModel> alerts, String? city) {
+    final normalizedCity = city?.trim().toLowerCase();
+    if (normalizedCity == null || normalizedCity.isEmpty) return alerts;
+    return alerts
+        .where((alert) => alert.location.toLowerCase().contains(normalizedCity))
+        .toList();
   }
 
   // ─────────────────── MAP PREVIEW ───────────────────
@@ -829,12 +802,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             children: [
                               _buildMapTag(aqiValue != null
-                                  ? 'AQI $aqiValue'
-                                  : 'AQI --'),
+                                  ? 'Model AQI $aqiValue'
+                                  : 'Model AQI --'),
                               const SizedBox(width: 6),
                               _buildMapTag(floodPercent != null
-                                  ? 'Flood $floodPercent%'
-                                  : 'Flood --'),
+                                  ? 'Cloudburst $floodPercent%'
+                                  : 'Cloudburst --'),
                             ],
                           ),
                         ],

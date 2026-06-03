@@ -11,6 +11,10 @@ import '../services/supabase_service.dart';
 import '../utils/hash_utils.dart';
 
 class AuthProvider extends ChangeNotifier {
+  static const Set<String> _demoPremiumEmails = {
+    'bilalawan2424@gmail.com',
+  };
+
   SupabaseAuthService? _supabaseAuthService;
   SupabaseService? _supabaseService;
   bool _isSupabaseUser = false;
@@ -68,13 +72,14 @@ class AuthProvider extends ChangeNotifier {
       _isEmailVerified = user.emailConfirmedAt != null;
       _isAuthenticated = true;
       try {
-        _profile = await _supabaseService?.getById(SupabaseTables.profiles, user.id);
+        _profile =
+            await _supabaseService?.getById(SupabaseTables.profiles, user.id);
       } catch (_) {
         _profile = null;
       }
       _currentUser = _profileToUserModel(user.id, _profile);
-      _hasShownUpgradePrompt =
-          _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
+      _hasShownUpgradePrompt = _currentUser!.role == UserRole.premium ||
+          _currentUser!.role == UserRole.admin;
       _hasShownVerifyWarning = false;
       _isLoading = false;
       _errorMessage = null;
@@ -95,7 +100,14 @@ class AuthProvider extends ChangeNotifier {
 
   UserRole get currentRole => _currentUser?.role ?? UserRole.general;
   bool get isAdmin => currentRole == UserRole.admin;
-  bool get isPremium => currentRole == UserRole.premium;
+  bool get _hasDemoPremiumAccess {
+    final email = _currentUser?.email.trim().toLowerCase();
+    return email != null && _demoPremiumEmails.contains(email);
+  }
+
+  bool get isPremium =>
+      currentRole == UserRole.premium || _hasDemoPremiumAccess;
+  bool get hasPremiumAccess => isAdmin || isPremium;
   bool get isBasic => currentRole == UserRole.registered;
 
   bool get hasShownUpgradePrompt => _hasShownUpgradePrompt;
@@ -104,11 +116,11 @@ class AuthProvider extends ChangeNotifier {
   bool get shouldShowPlanPrompt {
     if (_currentUser == null) return false;
     if (_currentUser!.role == UserRole.admin) return false;
-    if (_currentUser!.role == UserRole.premium) return false;
+    if (hasPremiumAccess) return false;
     return (_profile?['has_seen_plan_prompt'] as bool? ??
-        _profile?['hasSeenPlanPrompt'] as bool? ??
-        false) !=
-      true;
+            _profile?['hasSeenPlanPrompt'] as bool? ??
+            false) !=
+        true;
   }
 
   bool get shouldShowHealthPrompt {
@@ -241,7 +253,8 @@ class AuthProvider extends ChangeNotifier {
     _isEmailVerified = user.emailConfirmedAt != null;
     _isAuthenticated = true;
     try {
-      _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+      _profile =
+          await _supabaseService!.getById(SupabaseTables.profiles, user.id);
     } catch (_) {
       _profile = null;
     }
@@ -278,13 +291,15 @@ class AuthProvider extends ChangeNotifier {
       _isAuthenticated = true;
 
       try {
-        _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+        _profile =
+            await _supabaseService!.getById(SupabaseTables.profiles, user.id);
       } catch (e) {
         debugPrint('[AuthProvider] Profile fetch error: $e');
         _profile = null;
       }
       if (_profile == null) {
-        debugPrint('[AuthProvider] WARNING: profile is null for ${user.email} — '
+        debugPrint(
+            '[AuthProvider] WARNING: profile is null for ${user.email} — '
             'check RLS SELECT policy on profiles table and that the row exists.');
       } else {
         debugPrint('[AuthProvider] Profile loaded — role: ${_profile!['role']} '
@@ -293,8 +308,8 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = _profileToUserModel(user.id, _profile);
       debugPrint('[AuthProvider] Mapped role → ${_currentUser!.role.name} '
           '| isAdmin: ${_currentUser!.role == UserRole.admin}');
-      _hasShownUpgradePrompt =
-          _currentUser!.role == UserRole.premium || _currentUser!.role == UserRole.admin;
+      _hasShownUpgradePrompt = _currentUser!.role == UserRole.premium ||
+          _currentUser!.role == UserRole.admin;
       _hasShownVerifyWarning = false;
       _errorMessage = null;
       await _loadHealthPromptFlag();
@@ -349,7 +364,8 @@ class AuthProvider extends ChangeNotifier {
           'role': 'registered',
           'has_seen_plan_prompt': false,
         });
-        _profile = await _supabaseService!.getById(SupabaseTables.profiles, user.id);
+        _profile =
+            await _supabaseService!.getById(SupabaseTables.profiles, user.id);
       } catch (_) {
         _profile = null;
       }

@@ -5,7 +5,6 @@ import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
 import '../models/alert_model.dart';
-import '../models/user_model.dart';
 import '../providers/alert_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/premium_ux.dart';
@@ -81,7 +80,7 @@ class AlertItem {
       iconColor: severityColor,
       gradientColor: severityColor,
       category: category,
-      description: m.actionText,
+      description: m.actionText.isNotEmpty ? m.actionText : m.description,
     );
   }
 }
@@ -121,19 +120,28 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
     });
   }
 
-  List<AlertItem> _getFilteredAlerts(List<AlertModel> alerts) {
-    final items = alerts.map(AlertItem.fromAlertModel).toList();
+  List<AlertItem> _getFilteredAlerts(List<AlertModel> alerts, String? city) {
+    final localAlerts = _localAlerts(alerts, city);
+    final items = localAlerts.map(AlertItem.fromAlertModel).toList();
     if (_selectedCategory == 'All') return items;
     return items.where((a) => a.category == _selectedCategory).toList();
+  }
+
+  List<AlertModel> _localAlerts(List<AlertModel> alerts, String? city) {
+    final normalizedCity = city?.trim().toLowerCase();
+    if (normalizedCity == null || normalizedCity.isEmpty) return alerts;
+    return alerts
+        .where((alert) => alert.location.toLowerCase().contains(normalizedCity))
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final alertProvider = context.watch<AlertProvider>();
-    final isPremium = auth.isPremium;
-    final isGuest = auth.currentRole == UserRole.general;
-    final filteredAlerts = _getFilteredAlerts(alertProvider.alerts);
+    final hasPremiumAccess = auth.hasPremiumAccess;
+    final filteredAlerts =
+        _getFilteredAlerts(alertProvider.alerts, auth.currentUser?.city);
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -142,7 +150,7 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
           children: [
             _Header(
               onSettings: () {
-                if (isGuest) {
+                if (!hasPremiumAccess) {
                   showPremiumFeatureDialog(
                     context,
                     featureName: 'Notification settings',
@@ -166,16 +174,18 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
                 child: Row(
                   children: [
                     Icon(
-                      isPremium ? Icons.notifications_active : Icons.notifications_rounded,
+                      hasPremiumAccess
+                          ? Icons.notifications_active
+                          : Icons.volume_off,
                       color: AppColors.primary,
                       size: 20,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        isPremium
-                            ? 'Priority geo-based alerts active for your area.'
-                            : 'Alerts are active. Premium adds geo-based radius filtering.',
+                        hasPremiumAccess
+                            ? 'Priority notifications are active. You\'ll receive geo-based alerts for your area.'
+                            : 'Upgrade to Premium for geo-based warnings and instant alerts.',
                         style: TextStyle(
                           color: AppColors.textPrimary.withOpacity(0.85),
                           fontWeight: FontWeight.w500,
@@ -217,8 +227,8 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
             const CircularProgressIndicator(color: AppColors.primary),
             const SizedBox(height: 16),
             Text('Loading alerts...',
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textPrimary)),
+                style:
+                    AppTextStyles.body.copyWith(color: AppColors.textPrimary)),
           ],
         ),
       );
@@ -290,8 +300,7 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
               padding: const EdgeInsets.only(right: 24),
               decoration: BoxDecoration(
                 color: Colors.red.shade700,
-                borderRadius:
-                    BorderRadius.circular(AppSpacing.radius16),
+                borderRadius: BorderRadius.circular(AppSpacing.radius16),
               ),
               child: const Icon(Icons.delete_outline,
                   color: Colors.white, size: 28),

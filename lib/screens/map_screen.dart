@@ -85,9 +85,10 @@ class _MapScreenState extends State<MapScreen> {
     HazardZoneProvider zones,
   ) {
     final circles = <CircleMarker>[];
-    final floodLevel = floodProvider.risk?.level ?? FloodRiskLevel.low;
+    final cloudburstScore = _cloudburstScore(floodProvider);
+    final floodLevel = _scoreToLevel(cloudburstScore);
     final rainfall = floodProvider.risk?.rainfall;
-    final cityAqi = aqiProvider.current?.aqi ?? 50;
+    final cityAqi = _modelAqi(aqiProvider);
 
     for (final z in _activeZones(zones)) {
       final point = LatLng(z.latitude, z.longitude);
@@ -136,9 +137,10 @@ class _MapScreenState extends State<MapScreen> {
     BuildContext ctx,
   ) {
     final markers = <Marker>[];
-    final floodLevel = floodProvider.risk?.level ?? FloodRiskLevel.low;
+    final cloudburstScore = _cloudburstScore(floodProvider);
+    final floodLevel = _scoreToLevel(cloudburstScore);
     final rainfall = floodProvider.risk?.rainfall;
-    final cityAqi = aqiProvider.current?.aqi ?? 50;
+    final cityAqi = _modelAqi(aqiProvider);
     final zoneType = _isAqiMode ? 'aqi' : 'flood';
 
     for (final z in _activeZones(zones)) {
@@ -162,6 +164,7 @@ class _MapScreenState extends State<MapScreen> {
             zoneType,
             _isAqiMode ? floodLevel : _scoreToLevel(floodScore),
             zoneAqi,
+            floodScore,
             color,
             isHighRisk,
           ),
@@ -196,6 +199,7 @@ class _MapScreenState extends State<MapScreen> {
     String zoneType,
     FloodRiskLevel floodLevel,
     int aqiVal,
+    double floodScore,
     Color color,
     bool isHighRisk,
   ) {
@@ -203,8 +207,8 @@ class _MapScreenState extends State<MapScreen> {
     final riskLabel = isAqi ? _aqiLabel(aqiVal) : floodLevel.name.toUpperCase();
     final advice = isAqi ? _aqiAdvice(aqiVal) : _floodAdvice(floodLevel);
     final modelSource = isAqi
-        ? 'Open-Meteo live AQI + EcoAlert zone spread'
-        : 'EcoAlert Cloudburst ML Model (LogisticRegression)';
+        ? 'EcoAlert AQI numerical ML model + zone spread'
+        : 'EcoAlert Cloudburst ML model + zone spread';
 
     showModalBottomSheet(
       context: ctx,
@@ -302,14 +306,12 @@ class _MapScreenState extends State<MapScreen> {
             // Value row
             Row(
               children: [
-                Text(isAqi ? 'AQI Reading' : 'Cloudburst Risk Score',
+                Text(isAqi ? 'Model AQI' : 'Cloudburst Probability',
                     style: AppTextStyles.bodySmall
                         .copyWith(color: AppColors.textSecondary)),
                 const Spacer(),
                 Text(
-                  isAqi
-                      ? '$aqiVal'
-                      : '${floodLevel.name.toUpperCase()} (${_floodScore(floodLevel)}/100)',
+                  isAqi ? '$aqiVal' : '${floodScore.round()}%',
                   style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700),
@@ -378,17 +380,17 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  int _floodScore(FloodRiskLevel level) {
-    switch (level) {
-      case FloodRiskLevel.low:
-        return 20;
-      case FloodRiskLevel.moderate:
-        return 45;
-      case FloodRiskLevel.high:
-        return 70;
-      case FloodRiskLevel.critical:
-        return 90;
+  int _modelAqi(AqiProvider provider) {
+    final reading = provider.current;
+    return reading?.predictedAqi ?? reading?.aqi ?? 0;
+  }
+
+  double _cloudburstScore(FloodProvider provider) {
+    final probability = provider.risk?.cloudburstProbability;
+    if (probability != null) {
+      return (probability * 100).clamp(0.0, 100.0);
     }
+    return (provider.risk?.riskScore ?? 0).toDouble().clamp(0.0, 100.0);
   }
 
   int _zoneAqi(String zoneName, int cityAqi) {
@@ -431,12 +433,9 @@ class _MapScreenState extends State<MapScreen> {
     final isHeatmapLoading = _heatmapMode == HeatmapMode.aqi
         ? aqiProvider.isLoading
         : floodProvider.isLoading;
-    final floodLevel = floodProvider.risk?.level ?? FloodRiskLevel.low;
-    final aqiVal = aqiProvider.current?.aqi ?? 0;
-    final showAlert = _isAqiMode
-        ? aqiVal > 100
-        : floodLevel == FloodRiskLevel.high ||
-            floodLevel == FloodRiskLevel.critical;
+    final cloudburstScore = _cloudburstScore(floodProvider);
+    final aqiVal = _modelAqi(aqiProvider);
+    final showAlert = _isAqiMode ? aqiVal > 100 : cloudburstScore >= 60;
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -681,8 +680,8 @@ class _MapScreenState extends State<MapScreen> {
                             Expanded(
                               child: Text(
                                 _isAqiMode
-                                    ? 'AQI $aqiVal — Tap orange/red zones for air quality details.'
-                                    : '${floodLevel.name.toUpperCase()} flood risk — Tap water zones for runoff warnings.',
+                                    ? 'Model AQI $aqiVal - Tap orange/red zones for air quality details.'
+                                    : 'Cloudburst ${cloudburstScore.round()}% - Tap water zones for model details.',
                                 style: AppTextStyles.bodySmall.copyWith(
                                   color: _isAqiMode
                                       ? (aqiVal > 150

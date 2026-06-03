@@ -14,33 +14,43 @@ import '../utils/snackbar_helper.dart';
 // ── Category helpers ──────────────────────────────────────────────────────────
 
 const _kTabLabels = ['All', 'Flood', 'Smog/AQI', 'Heatwave', 'Road'];
-const _kTabKeys   = ['all', 'flood', 'aqi',      'heatwave', 'roads'];
+const _kTabKeys = ['all', 'flood', 'aqi', 'heatwave', 'roads'];
 
 Color _categoryColor(String cat) {
   switch (cat) {
-    case 'flood':    return AppColors.info;
-    case 'aqi':      return AppColors.warning;
-    case 'heatwave': return AppColors.danger;
-    case 'roads':    return AppColors.primary;
-    default:         return AppColors.textSecondary;
+    case 'flood':
+      return AppColors.info;
+    case 'aqi':
+      return AppColors.warning;
+    case 'heatwave':
+      return AppColors.danger;
+    case 'roads':
+      return AppColors.primary;
+    default:
+      return AppColors.textSecondary;
   }
 }
 
 String _categoryLabel(String cat) {
   switch (cat) {
-    case 'flood':    return 'Flood';
-    case 'aqi':      return 'Smog/AQI';
-    case 'heatwave': return 'Heatwave';
-    case 'roads':    return 'Road';
-    default:         return 'General';
+    case 'flood':
+      return 'Flood';
+    case 'aqi':
+      return 'Smog/AQI';
+    case 'heatwave':
+      return 'Heatwave';
+    case 'roads':
+      return 'Road';
+    default:
+      return 'General';
   }
 }
 
 String _timeAgo(DateTime dt) {
   final diff = DateTime.now().difference(dt);
-  if (diff.inMinutes < 1)  return 'just now';
+  if (diff.inMinutes < 1) return 'just now';
   if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24)   return '${diff.inHours}h ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
   return '${diff.inDays}d ago';
 }
 
@@ -84,9 +94,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
   @override
   Widget build(BuildContext context) {
     final community = context.watch<CommunityProvider>();
-    final auth      = context.watch<AuthProvider>();
+    final auth = context.watch<AuthProvider>();
     final currentUid = auth.currentUser?.id;
-    final isAdmin    = auth.isAdmin;
+    final isAdmin = auth.isAdmin;
 
     return Scaffold(
       backgroundColor: AppColors.bgSecondary,
@@ -126,8 +136,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                         color: AppColors.textSecondary),
                   ),
                   IconButton(
-                    onPressed: () =>
-                        Navigator.pushNamed(context, '/alerts'),
+                    onPressed: () => Navigator.pushNamed(context, '/alerts'),
                     icon: const Icon(Icons.notifications_outlined,
                         color: AppColors.textSecondary),
                   ),
@@ -165,14 +174,11 @@ class _CommunityScreenState extends State<CommunityScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: sel
-                            ? AppColors.bgElevated
-                            : AppColors.bgCard,
+                        color: sel ? AppColors.bgElevated : AppColors.bgCard,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: sel
-                              ? AppColors.border
-                              : AppColors.borderSubtle,
+                          color:
+                              sel ? AppColors.border : AppColors.borderSubtle,
                         ),
                       ),
                       child: Text(
@@ -182,9 +188,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                               ? AppColors.textPrimary
                               : AppColors.textSecondary,
                           fontSize: 12,
-                          fontWeight: sel
-                              ? FontWeight.w700
-                              : FontWeight.w500,
+                          fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
                         ),
                       ),
                     ),
@@ -257,8 +261,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
               const SizedBox(height: 16),
               Text(
                 'Be the first to post in your community',
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textSecondary),
+                style:
+                    AppTextStyles.body.copyWith(color: AppColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -306,11 +310,11 @@ class _NewPostSheetState extends State<_NewPostSheet> {
   bool _submitting = false;
 
   static const _categories = [
-    ('flood',    'Flood',     AppColors.info),
-    ('aqi',      'Smog/AQI',  AppColors.warning),
-    ('heatwave', 'Heatwave',  AppColors.danger),
-    ('roads',    'Road',      AppColors.primary),
-    ('general',  'General',   AppColors.textSecondary),
+    ('flood', 'Flood', AppColors.info),
+    ('aqi', 'Smog/AQI', AppColors.warning),
+    ('heatwave', 'Heatwave', AppColors.danger),
+    ('roads', 'Road', AppColors.primary),
+    ('general', 'General', AppColors.textSecondary),
   ];
 
   @override
@@ -336,9 +340,9 @@ class _NewPostSheetState extends State<_NewPostSheet> {
     setState(() => _submitting = true);
     FocusScope.of(context).unfocus();
 
-    final auth      = context.read<AuthProvider>();
+    final auth = context.read<AuthProvider>();
     final community = context.read<CommunityProvider>();
-    final city      = auth.currentUser?.city ?? '';
+    final city = auth.currentUser?.city ?? '';
 
     final ok = await community.addPost(
       content: content,
@@ -353,8 +357,9 @@ class _NewPostSheetState extends State<_NewPostSheet> {
     if (ok) {
       Navigator.pop(context);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Could not post — please try again.'),
+      final message = community.errorMessage ?? 'Could not post. Try again.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message),
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
       ));
@@ -402,8 +407,8 @@ class _NewPostSheetState extends State<_NewPostSheet> {
             style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
             decoration: InputDecoration(
               hintText: 'Describe the hazard or situation…',
-              hintStyle: AppTextStyles.body
-                  .copyWith(color: AppColors.textDisabled),
+              hintStyle:
+                  AppTextStyles.body.copyWith(color: AppColors.textDisabled),
               filled: true,
               fillColor: AppColors.bgElevated,
               border: OutlineInputBorder(
@@ -425,8 +430,8 @@ class _NewPostSheetState extends State<_NewPostSheet> {
 
           // Category chips
           Text('Category',
-              style: AppTextStyles.label
-                  .copyWith(color: AppColors.textSecondary)),
+              style:
+                  AppTextStyles.label.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -438,16 +443,14 @@ class _NewPostSheetState extends State<_NewPostSheet> {
                 onTap: () => setState(() => _category = key),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color:
-                        sel ? color.withOpacity(0.15) : AppColors.bgElevated,
+                    color: sel ? color.withOpacity(0.15) : AppColors.bgElevated,
                     borderRadius: BorderRadius.circular(50),
                     border: Border.all(
-                      color: sel
-                          ? color.withOpacity(0.5)
-                          : AppColors.borderSubtle,
+                      color:
+                          sel ? color.withOpacity(0.5) : AppColors.borderSubtle,
                       width: sel ? 1.5 : 1,
                     ),
                   ),
@@ -470,13 +473,12 @@ class _NewPostSheetState extends State<_NewPostSheet> {
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: AppColors.bgElevated,
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: AppColors.borderSubtle),
+                    border: Border.all(color: AppColors.borderSubtle),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -519,8 +521,7 @@ class _NewPostSheetState extends State<_NewPostSheet> {
               onPressed: _submitting ? null : _submit,
               style: TextButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                disabledBackgroundColor:
-                    AppColors.primary.withOpacity(0.4),
+                disabledBackgroundColor: AppColors.primary.withOpacity(0.4),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ),
@@ -590,8 +591,7 @@ class _PostCardState extends State<_PostCard> {
 
   bool get _canDelete =>
       widget.isAdmin ||
-      (widget.currentUid != null &&
-          widget.currentUid == widget.post.userId);
+      (widget.currentUid != null && widget.currentUid == widget.post.userId);
 
   Future<void> _onLikeTap() async {
     HapticFeedback.lightImpact();
@@ -608,8 +608,7 @@ class _PostCardState extends State<_PostCard> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.bgCard,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete post?',
             style: TextStyle(color: AppColors.textPrimary)),
         content: const Text(
@@ -626,8 +625,7 @@ class _PostCardState extends State<_PostCard> {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete',
                 style: TextStyle(
-                    color: AppColors.danger,
-                    fontWeight: FontWeight.bold)),
+                    color: AppColors.danger, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -640,10 +638,9 @@ class _PostCardState extends State<_PostCard> {
 
   @override
   Widget build(BuildContext context) {
-    final p       = widget.post;
-    final accent  = _categoryColor(p.category);
-    final initials =
-        p.username.isNotEmpty ? p.username[0].toUpperCase() : '?';
+    final p = widget.post;
+    final accent = _categoryColor(p.category);
+    final initials = p.username.isNotEmpty ? p.username[0].toUpperCase() : '?';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -668,8 +665,7 @@ class _PostCardState extends State<_PostCard> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: accent.withOpacity(0.12),
-                    border:
-                        Border.all(color: accent.withOpacity(0.3)),
+                    border: Border.all(color: accent.withOpacity(0.3)),
                   ),
                   child: Center(
                     child: Text(
@@ -702,18 +698,15 @@ class _PostCardState extends State<_PostCard> {
                       Row(
                         children: [
                           const Icon(Icons.schedule_rounded,
-                              size: 10,
-                              color: AppColors.textDisabled),
+                              size: 10, color: AppColors.textDisabled),
                           const SizedBox(width: 3),
                           Text(_timeAgo(p.createdAt),
                               style: const TextStyle(
-                                  color: AppColors.textDisabled,
-                                  fontSize: 10)),
+                                  color: AppColors.textDisabled, fontSize: 10)),
                           if (p.city.isNotEmpty) ...[
                             const SizedBox(width: 8),
                             const Icon(Icons.location_on_rounded,
-                                size: 10,
-                                color: AppColors.textDisabled),
+                                size: 10, color: AppColors.textDisabled),
                             const SizedBox(width: 2),
                             Expanded(
                               child: Text(
@@ -733,8 +726,8 @@ class _PostCardState extends State<_PostCard> {
 
                 // Category tag — reports get a special badge
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: accent.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(6),
@@ -817,16 +810,13 @@ class _PostCardState extends State<_PostCard> {
                             ? Icons.thumb_up_rounded
                             : Icons.thumb_up_alt_outlined,
                         size: 15,
-                        color:
-                            _liked ? accent : AppColors.textSecondary,
+                        color: _liked ? accent : AppColors.textSecondary,
                       ),
                       const SizedBox(width: 5),
                       Text(
                         '$_likes ${_likes == 1 ? 'Like' : 'Likes'}',
                         style: TextStyle(
-                          color: _liked
-                              ? accent
-                              : AppColors.textSecondary,
+                          color: _liked ? accent : AppColors.textSecondary,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),

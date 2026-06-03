@@ -32,14 +32,14 @@ class AlertDetailScreen extends StatelessWidget {
             child: Column(
               children: [
                 _TopBar(),
-                const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: alert == null
-                      ? _EmptyLiveFeed()
-                      : _AlertCard(alert: alert),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    child: alert == null
+                        ? _EmptyLiveFeed()
+                        : _AlertCard(alert: alert),
+                  ),
                 ),
-                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -53,7 +53,6 @@ class AlertDetailScreen extends StatelessWidget {
     if (alerts.isEmpty) return null;
     return AlertItem.fromAlertModel(alerts.first);
   }
-
 }
 
 class _EmptyLiveFeed extends StatelessWidget {
@@ -74,7 +73,7 @@ class _EmptyLiveFeed extends StatelessWidget {
               color: AppColors.textDisabled, size: 36),
           const SizedBox(height: 12),
           Text(
-            'No live alerts right now',
+            'No alert selected',
             style: AppTextStyles.titleMed.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w600,
@@ -82,11 +81,17 @@ class _EmptyLiveFeed extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'When a new alert is issued, it will appear here automatically.',
+            'Open an active alert from the alerts list to view its live details, safety guidance, and source category.',
             textAlign: TextAlign.center,
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
             ),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/alerts'),
+            icon: const Icon(Icons.notifications_active_outlined, size: 18),
+            label: const Text('Back to alerts'),
           ),
         ],
       ),
@@ -104,13 +109,18 @@ class _TopBar extends StatelessWidget {
         children: [
           Text(
             'EcoAlert Live Monitor',
-            style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                color: AppColors.textSecondary, fontWeight: FontWeight.w600),
           ),
           Row(
             children: [
               const Icon(Icons.circle, size: 10, color: AppColors.danger),
               const SizedBox(width: 6),
-              Text('LIVE FEED', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              Text('LIVE FEED',
+                  style: TextStyle(
+                      color: AppColors.danger,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1)),
             ],
           ),
         ],
@@ -150,7 +160,8 @@ class _AlertCard extends StatelessWidget {
             height: 6,
             decoration: BoxDecoration(
               color: alert.severityColor,
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
+              borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(18), topRight: Radius.circular(18)),
             ),
           ),
           Padding(
@@ -168,9 +179,11 @@ class _AlertCard extends StatelessWidget {
                 _StatsGrid(alert: alert),
                 const SizedBox(height: 12),
                 Text(
-                  'Seek higher ground immediately. Avoid basement areas.',
+                  _recommendedAction(alert),
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.body.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                  style: AppTextStyles.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
                 _PrimaryButton(
@@ -212,6 +225,20 @@ class _AlertCard extends StatelessWidget {
       ),
     );
   }
+
+  String _recommendedAction(AlertItem alert) {
+    switch (alert.category) {
+      case 'Flood':
+      case 'Cloudburst':
+        return 'Avoid low-lying routes and follow local emergency updates.';
+      case 'Smog/AQI':
+        return 'Limit outdoor exposure and use a mask if air quality is poor.';
+      case 'Heatwave':
+        return 'Stay hydrated and avoid direct sun during peak afternoon hours.';
+      default:
+        return 'Monitor the alert and follow official local guidance.';
+    }
+  }
 }
 
 class _BadgeRow extends StatelessWidget {
@@ -242,12 +269,12 @@ class _BadgeRow extends StatelessWidget {
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.shield, color: Color(0xFFF2460D), size: 18),
-              SizedBox(width: 6),
+            children: [
+              const Icon(Icons.shield, color: Color(0xFFF2460D), size: 18),
+              const SizedBox(width: 6),
               Text(
-                'Critical Alert',
-                style: TextStyle(
+                alert.category,
+                style: const TextStyle(
                   color: Color(0xFFF2460D),
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1,
@@ -320,7 +347,10 @@ class _AnalysisBox extends StatelessWidget {
               children: [
                 const Text(
                   'AI Analysis',
-                  style: TextStyle(color: Color(0xFFF2460D), fontSize: 12, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Color(0xFFF2460D),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -346,16 +376,18 @@ class _StatsGrid extends StatelessWidget {
       children: [
         Expanded(
           child: _StatCard(
-            title: 'Rainfall',
-            value: alert.extraStat ?? '—',
+            title: 'Severity',
+            value: alert.severityLabel.isNotEmpty
+                ? alert.severityLabel.toUpperCase()
+                : 'ACTIVE',
             accent: Colors.blueAccent,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _StatCard(
-            title: 'AQI Level',
-            value: alert.aqiLabel ?? '180',
+            title: 'Type',
+            value: alert.category,
             accent: Colors.orangeAccent,
           ),
         ),
@@ -365,7 +397,8 @@ class _StatsGrid extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.title, required this.value, required this.accent});
+  const _StatCard(
+      {required this.title, required this.value, required this.accent});
   final String title;
   final String value;
   final Color accent;
@@ -382,9 +415,17 @@ class _StatCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title.toUpperCase(), style: const TextStyle(color: Color(0xFFbaa39c), fontSize: 11, fontWeight: FontWeight.bold)),
+          Text(title.toUpperCase(),
+              style: const TextStyle(
+                  color: Color(0xFFbaa39c),
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Container(
             height: 6,
@@ -410,7 +451,8 @@ class _StatCard extends StatelessWidget {
 }
 
 class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.label, required this.icon, required this.onPressed});
+  const _PrimaryButton(
+      {required this.label, required this.icon, required this.onPressed});
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
@@ -450,7 +492,8 @@ class _GhostButton extends StatelessWidget {
       onPressed: onPressed,
       child: Text(
         label,
-        style: const TextStyle(color: Color(0xFFbaa39c), fontWeight: FontWeight.w600),
+        style: const TextStyle(
+            color: Color(0xFFbaa39c), fontWeight: FontWeight.w600),
       ),
     );
   }
