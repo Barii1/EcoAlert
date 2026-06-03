@@ -41,7 +41,7 @@ class DailyBriefService {
   DailyBriefService._();
   static final DailyBriefService instance = DailyBriefService._();
 
-  static const _timeout = Duration(seconds: 25);
+  static const _timeout = Duration(seconds: 50);
   String get _base => AppConfig.uploadApiBaseUrl;
 
   Future<DailyBrief> fetchSummary({
@@ -54,6 +54,7 @@ class DailyBriefService {
     double? temperature,
     double? humidity,
     String? weatherDesc,
+    List<String> healthConditions = const [],
   }) async {
     final body = jsonEncode({
       'city':              city,
@@ -65,6 +66,7 @@ class DailyBriefService {
       if (temperature != null)    'temperature': temperature,
       if (humidity != null)       'humidity': humidity,
       if (weatherDesc != null)    'weather_desc': weatherDesc,
+      if (healthConditions.isNotEmpty) 'health_conditions': healthConditions,
     });
 
     final resp = await http
@@ -91,6 +93,7 @@ class DailyBriefService {
     String? cloudburstRisk,
     double? temperature,
     String? weatherDesc,
+    List<String> healthConditions = const [],
   }) async {
     final body = jsonEncode({
       'message': message,
@@ -102,6 +105,7 @@ class DailyBriefService {
       if (cloudburstRisk != null) 'cloudburst_risk': cloudburstRisk,
       if (temperature != null)    'temperature': temperature,
       if (weatherDesc != null)    'weather_desc': weatherDesc,
+      if (healthConditions.isNotEmpty) 'health_conditions': healthConditions,
     });
 
     final resp = await http

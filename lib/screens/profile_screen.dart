@@ -135,19 +135,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 24),
                     ],
 
-                    // ── Health calibration (Premium only) ────────────────────
+                    // ── Health calibration (all authenticated users) ──────────
                     _sectionLabel('AI Health Calibration'),
                     const SizedBox(height: 10),
-                    isPremium || isAdmin
-                        ? _buildHealthCard(auth)
-                        : _buildLockedCard(
-                            icon: Icons.monitor_heart_rounded,
-                            title: 'Health Calibration',
-                            description:
-                                'Tell the app about your health conditions to receive '
-                                'personalised AQI warnings and smog alerts.',
-                            tier: 'Premium',
-                          ),
+                    _buildHealthCard(auth),
                     const SizedBox(height: 24),
 
                     // ── About & Support ──────────────────────────────────────
@@ -625,105 +616,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }).toList(),
           ),
           if (_selectedConditions.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            const Divider(color: AppColors.borderSubtle, height: 1),
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.tune_rounded,
-                    size: 13, color: AppColors.textDisabled),
+                const Icon(Icons.check_circle_rounded,
+                    size: 13, color: AppColors.success),
                 const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _buildPersonalisationNote(_selectedConditions),
-                    style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textDisabled, height: 1.4),
-                  ),
+                Text(
+                  '${_selectedConditions.length} condition${_selectedConditions.length == 1 ? '' : 's'} saved — alerts personalised',
+                  style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.success, height: 1.4),
                 ),
               ],
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  String _buildPersonalisationNote(List<String> conditions) {
-    final hasRespiratory =
-        conditions.any((c) => c == 'Asthma' || c == 'COPD');
-    final hasCardiac = conditions.contains('Heart Condition');
-    final notes = <String>[];
-    if (hasRespiratory) notes.add('AQI alerts activated at 50 (Good→Moderate)');
-    if (hasCardiac) notes.add('Heatwave alerts at lower temperature thresholds');
-    if (conditions.contains('Elderly Care') || conditions.contains('Child Care')) {
-      notes.add('Conservative thresholds applied for vulnerable groups');
-    }
-    if (notes.isEmpty) notes.add('Your conditions are saved and will personalise your alerts');
-    return notes.join(' · ');
-  }
-
-  // ── Locked feature card ─────────────────────────────────────────────────────
-
-  Widget _buildLockedCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required String tier,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.bgElevated,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: AppColors.textDisabled, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(title,
-                        style: AppTextStyles.body.copyWith(
-                            color: AppColors.textDisabled,
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.info.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                            color: AppColors.info.withOpacity(0.3)),
-                      ),
-                      child: Text(tier,
-                          style: AppTextStyles.label.copyWith(
-                              color: AppColors.info, fontSize: 9)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(description,
-                    style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textDisabled, height: 1.4)),
-              ],
-            ),
-          ),
-          const Icon(Icons.lock_outline_rounded,
-              size: 16, color: AppColors.textDisabled),
         ],
       ),
     );

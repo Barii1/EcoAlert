@@ -114,8 +114,8 @@ class ReportConfirmationScreen extends StatelessWidget {
                     // Body text
                     Text(
                       isPremium
-                          ? 'Thank you for helping your community. Our AI has analyzed your report and Premium geo-alerts are notifying nearby users.'
-                          : 'Thank you for helping your community. Our AI has analyzed your report. Upgrade to Premium for geo-based warnings and priority notifications.',
+                          ? 'Thank you for helping your community. Our AI has analyzed your report and geo-alerts are notifying nearby users in your area.'
+                          : 'Thank you for helping your community. Our AI has analyzed your report and is alerting nearby users.',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondary,

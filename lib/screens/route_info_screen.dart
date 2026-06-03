@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_colors.dart';
 import '../config/app_config.dart';
+import '../config/city_hazard_zones.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
 import '../models/flood_model.dart';
@@ -70,18 +71,14 @@ class _RouteInfoScreenState extends State<RouteInfoScreen> {
   }
 
   String _defaultDestination(String city, List<HazardZoneModel> zones) {
-    final cityLower = city.toLowerCase();
-    final local = zones.where((z) => z.city.toLowerCase() == cityLower).toList();
-    if (local.isNotEmpty) {
-      return local.first.name;
+    final loc = context.read<LocationProvider>();
+    final pos = loc.currentPosition;
+    if (pos != null) {
+      return CityHazardZones.nearestSafeDestination(
+          city, pos.latitude, pos.longitude);
     }
-    if (zones.isNotEmpty) {
-      return zones.first.name;
-    }
-    if (city.isNotEmpty) {
-      return '$city Central';
-    }
-    return 'Safe Zone';
+    // No GPS — pick safe point for city without coordinates
+    return CityHazardZones.nearestSafeDestination(city, 0, 0);
   }
 
   List<_RouteOption> _buildRoutes(String city, FloodRiskLevel? floodLevel, int? aqi) {

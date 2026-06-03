@@ -5,6 +5,7 @@ import '../config/app_colors.dart';
 import '../config/app_spacing.dart';
 import '../config/app_text_styles.dart';
 import '../models/alert_model.dart';
+import '../models/user_model.dart';
 import '../providers/alert_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/premium_ux.dart';
@@ -131,6 +132,7 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
     final auth = context.watch<AuthProvider>();
     final alertProvider = context.watch<AlertProvider>();
     final isPremium = auth.isPremium;
+    final isGuest = auth.currentRole == UserRole.general;
     final filteredAlerts = _getFilteredAlerts(alertProvider.alerts);
 
     return Scaffold(
@@ -140,10 +142,10 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
           children: [
             _Header(
               onSettings: () {
-                if (!isPremium) {
+                if (isGuest) {
                   showPremiumFeatureDialog(
                     context,
-                    featureName: 'Notification settings & geo alerts',
+                    featureName: 'Notification settings',
                   );
                   return;
                 }
@@ -164,7 +166,7 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
                 child: Row(
                   children: [
                     Icon(
-                      isPremium ? Icons.notifications_active : Icons.volume_off,
+                      isPremium ? Icons.notifications_active : Icons.notifications_rounded,
                       color: AppColors.primary,
                       size: 20,
                     ),
@@ -172,8 +174,8 @@ class _AlertsScreenBodyState extends State<_AlertsScreenBody> {
                     Expanded(
                       child: Text(
                         isPremium
-                            ? 'Priority notifications are active. You\'ll receive geo-based alerts for your area.'
-                            : 'Upgrade to Premium for geo-based warnings and instant alerts.',
+                            ? 'Priority geo-based alerts active for your area.'
+                            : 'Alerts are active. Premium adds geo-based radius filtering.',
                         style: TextStyle(
                           color: AppColors.textPrimary.withOpacity(0.85),
                           fontWeight: FontWeight.w500,

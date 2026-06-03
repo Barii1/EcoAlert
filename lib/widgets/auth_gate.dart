@@ -46,10 +46,19 @@ class AuthGate extends StatelessWidget {
     }
 
     if (auth.shouldShowPlanPrompt && !auth.hasShownUpgradePrompt) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!context.mounted) return;
         auth.markUpgradePromptShown();
-        showPlanSelectionSheet(context);
+        await showPlanSelectionSheet(context);
+        if (!context.mounted) return;
+        if (auth.shouldShowHealthPrompt) {
+          await showHealthConditionsSheet(context);
+        }
+      });
+    } else if (auth.shouldShowHealthPrompt && !auth.hasShownHealthPrompt) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        showHealthConditionsSheet(context);
       });
     }
 
