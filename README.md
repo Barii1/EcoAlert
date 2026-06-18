@@ -251,7 +251,7 @@ firebase deploy --only hosting
 
 ## License
 
-This project is part of a Final Year Project (FYP) at [University Name].
+This project is part of a Final Year Project (FYP) at Forman Christian College University .
 
 ## Acknowledgments
 
